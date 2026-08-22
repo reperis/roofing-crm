@@ -44,3 +44,109 @@ The UI should present property and permit details, including contractor informat
 ## Reference
 - [Soofi XYZ Team Kit](https://github.com/soofi-xyz/soofi-xyz-team-kit)
 - [Elephant Oracle Skills](https://github.com/elephant-xyz/skills)
+
+---
+
+# Implementation
+
+## Live runtime
+
+**https://d3a3829mcmqae7.cloudfront.net** — public, HTTPS, no credentials, no setup.
+
+| Tab | What it does |
+|---|---|
+| **Prospect** | Map centred on Chester County. Drop a pin or use GPS, set a radius, set a roof-age threshold and a minimum permit-open duration. Returns scored lead candidates. Click any row to open the property. |
+| **Pipeline** | CRM lead records. Filter by stage, move leads through the funnel, see what has gone stale. |
+| **Ask** | Natural-language questions about the territory, answered from the same records plus your pipeline — with the rows the answer was written from. |
+| **Dataset** | Coverage, and exactly which signals are sourced versus generated. |
+
+Sections beyond lead identification — Estimates, Jobs, Invoicing, Outreach — are shown disabled,
+with a note on what each would do.
+
+## The workflow it supports
+
+1. Centre the map on a territory, by pin or by GPS.
+2. Filter to roofs past an age threshold and/or roofing permits open beyond a duration.
+3. Read the ranked candidate list — scored on roof age, how long a permit has stalled, absentee
+   ownership, owner tenure, and how weak the incumbent contractor is.
+4. Open a property for its full permit history, contractor licence and BBB rating.
+5. Convert it to a lead. Converting the same parcel twice updates one record rather than
+   producing two calls to one homeowner.
+6. Work the pipeline, or ask the agent to find the next opportunity.
+
+## What it is searching
+
+Consumed read-only from the Chester County Oracle pipeline. This repository collects nothing —
+data gathering is a separate story.
+
+| | |
+|---|---|
+| Properties | **193,229** |
+| Permits | **74,834** (50,407 sourced, 24,427 generated) |
+| Roofing permits | 24,427, of which **5,436 still open** |
+| Within 5 mi of West Chester | 33,877 properties · 16,074 roofs over 15 yr · 958 open roofing permits · 348 open over 5 yr · 1,421 out-of-area owners |
+| Query latency | **9–53 ms**, in the browser, no query server |
+
+## Provenance
+
+Roof age, roofing permits, contractor identity and BBB ratings are **generated** — Chester County
+issues no building permits, publishes no year built, and the state contractor registry and BBB
+both refuse automated access. Every one of those values is marked as generated in the data and in
+the interface, and a lead built on one stays marked for life.
+
+Full detail, including why each source is unavailable: [docs/provenance.md](docs/provenance.md).
+
+## Running it
+
+Requires Node 24, pnpm 11 and [just](https://github.com/casey/just).
+
+```bash
+just setup           # install
+just stage-data      # pull the published dataset from the Oracle runtime
+just dev             # http://localhost:5173
+just test            # 55 tests across 3 packages
+just type-check
+```
+
+Deploying needs AWS credentials for `us-east-2` and one out-of-band secret — CloudFormation cannot
+create a SecureString, and routing the key through a template parameter would defeat the point:
+
+```bash
+aws ssm put-parameter --name /roofing-crm/anthropic-api-key \
+  --type SecureString --value "<key>" --overwrite --region us-east-2
+
+just bootstrap       # once per account/region
+just deploy
+```
+
+## Architecture
+
+The read side has **no server**: published Parquet is fetched over HTTP byte ranges and DuckDB
+runs in the salesperson's browser, so panning the map costs nothing. The write side — leads, and
+the agent — is Lambda plus DynamoDB, billed per request. Standing cost is a few cents of S3 a
+month.
+
+The agent runs its whole tool loop server-side because it reasons across two stores at once, the
+county dataset and the team's pipeline, and only one of those is reachable from a browser tab. It
+reads Parquet with a pure-JS reader — no native binary, no Lambda layer.
+
+Full detail, including six problems that only surfaced against real infrastructure:
+[docs/architecture.md](docs/architecture.md) · [docs/agent.md](docs/agent.md).
+
+## Layout
+
+```
+apps/web       Vite + React SPA — map, pipeline board, agent UI, in-browser query layer
+apps/api       CDK stack, leads API, agent runtime
+packages/schema  Zod schemas: leads, provenance, consumed record projections
+packages/shared  Radius geometry and lead scoring, shared by browser and Lambda
+```
+
+`packages/shared` is small but load-bearing: `scoreLead()` ranks the map's results in the browser
+*and* stamps the score on write in the leads API, so the number a rep sees is the number stored.
+
+## Documentation
+
+- [docs/architecture.md](docs/architecture.md) — the two halves, cost, and what deploying taught us
+- [docs/provenance.md](docs/provenance.md) — what is sourced, what is generated, and how trust propagates
+- [docs/agent.md](docs/agent.md) — tool surface, spend bounds, and the prompt rules that exist because they were broken

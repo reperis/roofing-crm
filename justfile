@@ -29,6 +29,10 @@ test:
 build:
     pnpm turbo build
 
+# Run the web app against the staged dataset (http://localhost:5173)
+dev:
+    pnpm turbo dev
+
 # Deploy the CDK stack to AWS (us-east-2)
 deploy: build
     pnpm --filter @roofing/api exec cdk deploy --require-approval never
