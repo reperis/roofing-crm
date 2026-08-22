@@ -1,0 +1,8 @@
+{
+  "extends": "@roofing/tsconfig/react.json",
+  "compilerOptions": {
+    // Supplies the ambient declarations for CSS side-effect imports and import.meta.env.
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+}
