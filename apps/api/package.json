@@ -1,0 +1,24 @@
+{
+  "name": "@roofing/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CDK infrastructure, leads API and agent runtime for the roofing CRM",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "cdk": "cdk"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.266.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@roofing/tsconfig": "workspace:*",
+    "@types/node": "^26.2.0",
+    "aws-cdk": "^2.1138.0",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

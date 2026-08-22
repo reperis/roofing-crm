@@ -1,0 +1,23 @@
+{
+  "extends": "@roofing/tsconfig/base.json",
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    // TypeScript 7 removed `moduleResolution: node` (node10). The CDK app is executed by tsx,
+    // which resolves like a bundler, so `preserve` keeps the CommonJS-style `__dirname` access
+    // working without demanding `.js` extensions on every relative import.
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    // aws-cdk-lib's public types are not authored against exactOptionalPropertyTypes: its
+    // interfaces declare `prop?: T` where they accept `T | undefined`, so passing a plain
+    // `Bucket` where an `IBucket` is expected fails. Relaxing the flag for this package only is
+    // more honest than scattering casts through the stack to satisfy a library we do not own.
+    // The rest of the workspace keeps it on.
+    "exactOptionalPropertyTypes": false,
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["cdk/**/*.ts", "src/**/*.ts", "test/**/*.ts"]
+}

@@ -1,0 +1,13 @@
+{
+  "app": "npx tsx cdk/bin/app.ts",
+  "output": "cdk.out",
+  "watch": {
+    "include": ["cdk/**/*.ts"],
+    "exclude": ["node_modules/**", "cdk.out/**", "**/*.d.ts"]
+  },
+  "context": {
+    "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true,
+    "@aws-cdk/aws-s3:serverAccessLogsUseBucketPolicy": true,
+    "@aws-cdk/aws-cloudfront:useOriginAccessControl": true
+  }
+}
