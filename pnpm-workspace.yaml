@@ -1,0 +1,13 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+allowBuilds:
+  # Vite's bundler; its postinstall fetches the platform-native binary. Without this the binary
+  # never installs and every `vite build` fails on a missing esbuild executable.
+  esbuild: true
+# Populated as dependencies are added. The workspace enforces a minimum release age, so any
+# package published more recently than the threshold has to be named here deliberately rather
+# than pulled in silently.
+minimumReleaseAgeExclude:
+  - eslint@10.9.0
+  - maplibre-gl@6.5.0

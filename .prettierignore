@@ -1,0 +1,10 @@
+# Upstream-authored requirements document. Reformatting it would produce a diff against work
+# nobody on this side wrote.
+README.md
+
+# Generated output
+pnpm-lock.yaml
+dist/
+cdk.out/
+.turbo/
+apps/web/public/dataset/

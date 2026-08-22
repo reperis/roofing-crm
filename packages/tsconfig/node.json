@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "display": "Node 24",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    // These packages are always consumed through a bundler (tsx locally, esbuild for the Lambda
+    // bundles) and are never emitted as standalone ESM, so bundler resolution is the accurate
+    // model. nodenext would additionally demand `.js` extensions on every relative import.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"]
+  }
+}

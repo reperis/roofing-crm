@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.turbo/
+cdk.out/
+.cdk.staging/
+*.tsbuildinfo
+
+# Secrets - never commit
+.env
+.env.*
+!.env.example
+.secrets.env
+
+# Dataset artifacts are consumed from the Oracle runtime, not committed. Staged locally by
+# `just stage-data`. Scoped to the staging directory rather than a bare `data/`, which would
+# also swallow application source living under any `src/data/`.
+/apps/web/public/dataset/
+*.parquet
+*.duckdb
+*.csv
+*.csv.gz
+
+.DS_Store
+Thumbs.db
