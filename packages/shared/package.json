@@ -1,0 +1,21 @@
+{
+  "name": "@roofing/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Radius geometry and lead scoring shared by the web app, the leads API and the agent",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@roofing/tsconfig": "workspace:*",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

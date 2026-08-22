@@ -1,0 +1,9 @@
+{
+  "extends": "@roofing/tsconfig/node.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}
