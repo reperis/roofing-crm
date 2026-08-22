@@ -1,14 +1,26 @@
 import * as path from 'node:path';
 
 import * as cdk from 'aws-cdk-lib';
+import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
+import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import type { Construct } from 'constructs';
 
-import { PROJECT_NAME } from './constants';
+import {
+  AGENT_DAILY_CALL_LIMIT,
+  ANTHROPIC_KEY_PARAMETER,
+  METRICS_NAMESPACE,
+  PROJECT_NAME,
+  SERVICE_NAME,
+} from './constants';
 
 /** Built SPA bundle, produced by `pnpm --filter @roofing/web build`. */
 const WEB_DIST = path.join(__dirname, '..', '..', '..', 'web', 'dist');
@@ -73,6 +85,26 @@ export class RoofingCrmStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    const leadsApi = this.addLeadsApi();
+    this.addAgentRoute(leadsApi, siteBucket);
+
+    /**
+     * What CloudFront forwards to the API origin.
+     *
+     * Query strings must be forwarded in full — `?status=contacted` is the pipeline board's whole
+     * filter, and the managed CORS policies drop query strings entirely, which turns a filtered
+     * request into an unfiltered one that silently returns the wrong rows rather than an error.
+     *
+     * The Host header must *not* be forwarded: API Gateway routes on it, and passing the
+     * CloudFront hostname through produces a 403 from a gateway that has never heard of it.
+     */
+    const apiOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, 'ApiOriginPolicy', {
+      comment: 'Forward query strings and body to the leads API, but not the Host header',
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList('content-type'),
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
+    });
+
     this.distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       comment: 'Roofing CRM - Chester County lead identification',
       defaultRootObject: 'index.html',
@@ -84,16 +116,39 @@ export class RoofingCrmStack extends cdk.Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         compress: true,
       },
-      // Client-side routing: unknown paths must return the SPA shell, not an S3 error document.
+      /**
+       * The leads API is served from the site's own origin, under `/api`.
+       *
+       * Routing it through the same distribution rather than exposing the API Gateway URL
+       * directly means the browser treats it as same-origin: no preflight, no CORS configuration
+       * to keep in step with a CloudFront domain that changes per deployment, and one hostname
+       * for the evaluator to reach. Caching is disabled because every response is per-team
+       * mutable state — a cached lead board would show one rep another's stale pipeline.
+       */
+      additionalBehaviors: {
+        'api/*': {
+          origin: new origins.HttpOrigin(cdk.Fn.select(2, cdk.Fn.split('/', leadsApi.apiEndpoint))),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          originRequestPolicy: apiOriginRequestPolicy,
+        },
+      },
+      /**
+       * Client-side routing: unknown paths return the SPA shell rather than an S3 error document.
+       *
+       * Only 403 is mapped, deliberately. Custom error responses are distribution-wide — they
+       * cannot be scoped to one behavior — so mapping 404 would rewrite the leads API's own
+       * "no such lead" into a 200 carrying the HTML page, which a JSON client cannot parse and
+       * which reports success for a request that failed.
+       *
+       * Mapping 403 alone is sufficient because the site bucket blocks public access and is read
+       * through origin access control: S3 answers a missing key with 403, not 404. So SPA deep
+       * links still resolve, and API 404s pass through untouched.
+       */
       errorResponses: [
         {
           httpStatus: 403,
-          responseHttpStatus: 200,
-          responsePagePath: '/index.html',
-          ttl: cdk.Duration.seconds(0),
-        },
-        {
-          httpStatus: 404,
           responseHttpStatus: 200,
           responsePagePath: '/index.html',
           ttl: cdk.Duration.seconds(0),
@@ -151,6 +206,150 @@ export class RoofingCrmStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'LeadsTableName', {
       value: this.leadsTable.tableName,
       description: 'DynamoDB table holding CRM lead records',
+    });
+
+    new cdk.CfnOutput(this, 'LeadsApiUrl', {
+      value: `https://${this.distribution.distributionDomainName}/api/leads`,
+      description: 'Lead records API, same-origin behind the site distribution',
+    });
+  }
+
+  /**
+   * The lead records API.
+   *
+   * One function for the whole resource rather than one per verb. The routes share their
+   * validation, their table access and their error shape, so splitting them would duplicate all
+   * three to save nothing — and five separate cold starts is worse for a sales rep clicking
+   * Convert than one warm container serving every path.
+   */
+  private addLeadsApi(): apigwv2.HttpApi {
+    const leadsFunction = new nodejs.NodejsFunction(this, 'LeadsFunction', {
+      entry: path.join(__dirname, '..', '..', 'src', 'leads', 'handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      timeout: cdk.Duration.seconds(15),
+      tracing: lambda.Tracing.ACTIVE,
+      logRetention: logs.RetentionDays.THREE_MONTHS,
+      environment: {
+        LEADS_TABLE_NAME: this.leadsTable.tableName,
+        POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
+        POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
+        POWERTOOLS_LOG_LEVEL: 'INFO',
+        NODE_OPTIONS: '--enable-source-maps',
+      },
+      bundling: { minify: true, sourceMap: true },
+    });
+
+    this.leadsTable.grantReadWriteData(leadsFunction);
+
+    const api = new apigwv2.HttpApi(this, 'LeadsApi', {
+      description: 'Roofing CRM lead records',
+    });
+
+    const integration = new integrations.HttpLambdaIntegration('LeadsIntegration', leadsFunction);
+
+    // Paths carry the `/api` prefix because CloudFront forwards the path unchanged; rewriting it
+    // at the edge would need a function association for no benefit.
+    api.addRoutes({
+      path: '/api/leads',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.POST],
+      integration,
+    });
+    api.addRoutes({
+      path: '/api/leads/{leadId}',
+      methods: [apigwv2.HttpMethod.GET, apigwv2.HttpMethod.PATCH],
+      integration,
+    });
+
+    // Throttling bounds a burst against an endpoint that is public by design.
+    const stage = api.defaultStage?.node.defaultChild as apigwv2.CfnStage | undefined;
+    if (stage !== undefined) {
+      stage.defaultRouteSettings = { throttlingRateLimit: 20, throttlingBurstLimit: 40 };
+    }
+
+    return api;
+  }
+
+  /**
+   * The natural-language lead-research agent.
+   *
+   * Added to the leads API rather than given its own gateway, so both share the single `/api/*`
+   * CloudFront behavior and the site keeps one origin. The agent reads the published Parquet
+   * straight from the site bucket and the pipeline from DynamoDB — it is the only component that
+   * sees both, which is why the model loop runs here rather than in the browser.
+   */
+  private addAgentRoute(api: apigwv2.HttpApi, datasetBucket: s3.Bucket): void {
+    /**
+     * Daily call counter.
+     *
+     * Separate from the leads table because its items are throwaway: a TTL expires them without a
+     * cleanup job, and mixing a self-deleting counter into the table that holds customer records
+     * invites exactly the kind of accident nobody notices until the records are gone.
+     */
+    const spendTable = new dynamodb.Table(this, 'AgentSpendTable', {
+      partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: 'expiresAt',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const agentFunction = new nodejs.NodejsFunction(this, 'AgentFunction', {
+      entry: path.join(__dirname, '..', '..', 'src', 'agent', 'handler.ts'),
+      handler: 'handler',
+      runtime: lambda.Runtime.NODEJS_22_X,
+      architecture: lambda.Architecture.ARM_64,
+      // Parsing 193,000 properties and 75,000 permits costs roughly 200 MB, once per container.
+      // More memory also buys proportionally more CPU, which is what makes the parse sub-second.
+      memorySize: 1536,
+      timeout: cdk.Duration.seconds(60),
+      tracing: lambda.Tracing.ACTIVE,
+      logRetention: logs.RetentionDays.THREE_MONTHS,
+      environment: {
+        // The key itself is never here. Only the name of the SecureString that holds it: an
+        // environment variable is rendered into the CloudFormation template and staged in S3, so
+        // a secret placed here would sit in plaintext in several places that outlive a rotation.
+        ANTHROPIC_API_KEY_PARAMETER: ANTHROPIC_KEY_PARAMETER,
+        AGENT_DAILY_CALL_LIMIT: String(AGENT_DAILY_CALL_LIMIT),
+        SPEND_TABLE_NAME: spendTable.tableName,
+        LEADS_TABLE_NAME: this.leadsTable.tableName,
+        DATASET_BUCKET: datasetBucket.bucketName,
+        DATASET_PREFIX: 'dataset',
+        POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
+        POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
+        POWERTOOLS_LOG_LEVEL: 'INFO',
+        NODE_OPTIONS: '--enable-source-maps',
+      },
+      bundling: { minify: true, sourceMap: true },
+    });
+
+    spendTable.grantReadWriteData(agentFunction);
+    this.leadsTable.grantReadWriteData(agentFunction);
+    datasetBucket.grantRead(agentFunction, 'dataset/*');
+
+    // Scoped to the one parameter, not to ssm:* — this role should be able to read the model key
+    // and nothing else in the account.
+    agentFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ssm:GetParameter'],
+        resources: [
+          cdk.Arn.format(
+            {
+              service: 'ssm',
+              resource: 'parameter',
+              resourceName: ANTHROPIC_KEY_PARAMETER.slice(1),
+            },
+            this,
+          ),
+        ],
+      }),
+    );
+
+    api.addRoutes({
+      path: '/api/agent',
+      methods: [apigwv2.HttpMethod.POST, apigwv2.HttpMethod.OPTIONS],
+      integration: new integrations.HttpLambdaIntegration('AgentIntegration', agentFunction),
     });
   }
 }

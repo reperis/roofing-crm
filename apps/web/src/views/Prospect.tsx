@@ -1,4 +1,9 @@
-import { weakestTier, type LeadCandidate, type ProvenanceTier } from '@roofing/schema';
+import {
+  weakestTier,
+  type LeadCandidate,
+  type LeadSourceSignal,
+  type ProvenanceTier,
+} from '@roofing/schema';
 import { scoreLead } from '@roofing/shared';
 import {
   GeolocateControl,
@@ -22,6 +27,7 @@ import {
   TABLE_RESULT_LIMIT,
   WEST_CHESTER,
 } from '../data/config';
+import { createLead } from '../data/leads';
 import { findLeadCandidates, getAreaSummary } from '../data/queries';
 import { useAsync } from '../hooks/useAsync';
 
@@ -241,6 +247,75 @@ function money(value: number | null): string {
   return value === null ? '—' : `$${value.toLocaleString('en-US')}`;
 }
 
+/**
+ * Turn a map result into a CRM lead.
+ *
+ * The snapshot sent here is the whole point: the lead records what was true about the property at
+ * the moment a rep decided to call, rather than re-reading the dataset later and quietly showing
+ * different numbers than the ones that justified the call.
+ */
+function ConvertButton({ row }: { row: ScoredCandidate }) {
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  const convert = async () => {
+    setState('saving');
+    setError(null);
+    try {
+      await createLead({
+        parcel_identifier: row.parcel_identifier,
+        source_signal: signalFor(row),
+        latitude: row.latitude,
+        longitude: row.longitude,
+        snapshot: {
+          address_street: row.address_street,
+          address_city: row.address_city,
+          address_zip: row.address_zip,
+          owner_name: row.owner_name,
+          owner_is_out_of_area: row.owner_is_out_of_area,
+          assessed_value: row.assessed_value,
+          last_sale_date: row.last_sale_date,
+          roof_age_years: row.roof_age_years,
+          roof_age_basis: row.roof_age_basis,
+          permit_number: row.permit_number,
+          permit_status: row.improvement_status,
+          permit_days_open: row.permit_days_open,
+          contractor_name: row.contractor_name,
+          contractor_bbb_rating: row.contractor_bbb_rating,
+          contractor_bbb_score: row.contractor_bbb_score,
+        },
+      });
+      setState('saved');
+    } catch (cause: unknown) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+      setState('failed');
+    }
+  };
+
+  if (state === 'saved') {
+    return <span className="tag tag--sourced">In pipeline</span>;
+  }
+
+  return (
+    <>
+      <button type="button" className="button button--small" disabled={state === 'saving'} onClick={() => void convert()}>
+        {state === 'saving' ? 'Saving…' : 'Convert'}
+      </button>
+      {error !== null && <span className="cell__sub status--error">{error}</span>}
+    </>
+  );
+}
+
+/** Which signal put this property on the list — drives the default outreach script. */
+function signalFor(row: ScoredCandidate): LeadSourceSignal {
+  const agedRoof = row.roof_age_years !== null && row.roof_age_years > 0;
+  const permit = row.permit_number !== null;
+
+  if (agedRoof && permit) return 'aged_roof_and_permit';
+  if (permit) return 'open_permit';
+  return 'aged_roof';
+}
+
 export function Prospect() {
   const [centre, setCentre] = useState<LatLon>(WEST_CHESTER);
   const [radius, setRadius] = useState(DEFAULT_RADIUS_MILES);
@@ -453,6 +528,7 @@ export function Prospect() {
                       <th className="num">Assessed</th>
                       <th className="num">Distance</th>
                       <th>Source</th>
+                      <th>Lead</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -490,6 +566,9 @@ export function Prospect() {
                         <td className="num">{row.distance_miles} mi</td>
                         <td>
                           <ProvenanceTag tier={row.rowTier} />
+                        </td>
+                        <td>
+                          <ConvertButton row={row} />
                         </td>
                       </tr>
                     ))}

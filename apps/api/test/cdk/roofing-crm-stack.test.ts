@@ -31,12 +31,46 @@ describe('RoofingCrmStack', () => {
   it('returns the SPA shell for client-side routes instead of an S3 error document', () => {
     template.hasResourceProperties('AWS::CloudFront::Distribution', {
       DistributionConfig: Match.objectLike({
-        CustomErrorResponses: Match.arrayWith([
+        CustomErrorResponses: [
           Match.objectLike({ ErrorCode: 403, ResponseCode: 200, ResponsePagePath: '/index.html' }),
-          Match.objectLike({ ErrorCode: 404, ResponseCode: 200, ResponsePagePath: '/index.html' }),
-        ]),
+        ],
       }),
     });
+  });
+
+  it('does not rewrite 404 into the SPA shell', () => {
+    // Custom error responses are distribution-wide and cannot be scoped to one behavior. Mapping
+    // 404 would turn the leads API's "no such lead" into a 200 carrying HTML — a failure the
+    // client reads as success. S3-with-OAC answers a missing key with 403, so deep links still
+    // work without it.
+    const distributions = template.findResources('AWS::CloudFront::Distribution');
+    for (const distribution of Object.values(distributions)) {
+      const responses = (distribution.Properties?.DistributionConfig?.CustomErrorResponses ??
+        []) as { ErrorCode: number }[];
+      expect(responses.map((response) => response.ErrorCode)).not.toContain(404);
+    }
+  });
+
+  it('forwards query strings to the API so stage filters are not silently dropped', () => {
+    // Without this the pipeline board's `?status=contacted` never reaches the Lambda, and the
+    // response is an unfiltered list rather than an error — the worst kind of failure.
+    template.hasResourceProperties('AWS::CloudFront::OriginRequestPolicy', {
+      OriginRequestPolicyConfig: Match.objectLike({
+        QueryStringsConfig: { QueryStringBehavior: 'all' },
+        CookiesConfig: { CookieBehavior: 'none' },
+      }),
+    });
+  });
+
+  it('does not forward the Host header to the API origin', () => {
+    // API Gateway routes on Host; the CloudFront hostname would produce a 403 from a gateway that
+    // has never heard of it.
+    const policies = template.findResources('AWS::CloudFront::OriginRequestPolicy');
+    for (const policy of Object.values(policies)) {
+      const headers = (policy.Properties?.OriginRequestPolicyConfig?.HeadersConfig?.Headers ??
+        []) as string[];
+      expect(headers.map((header) => header.toLowerCase())).not.toContain('host');
+    }
   });
 
   it('keeps the site bucket private behind origin access control', () => {

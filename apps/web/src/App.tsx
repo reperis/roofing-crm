@@ -1,6 +1,8 @@
 import { useState } from 'react';
 
+import { Ask } from './views/Ask';
 import { Dataset } from './views/Dataset';
+import { Pipeline } from './views/Pipeline';
 import { Prospect } from './views/Prospect';
 
 /** Injected by Vite at build time; see `define` in vite.config.ts. */
@@ -8,6 +10,8 @@ declare const __BUILD_TIME__: string;
 
 const TABS = [
   { id: 'prospect', label: 'Prospect', render: () => <Prospect /> },
+  { id: 'pipeline', label: 'Pipeline', render: () => <Pipeline /> },
+  { id: 'ask', label: 'Ask', render: () => <Ask /> },
   { id: 'dataset', label: 'Dataset', render: () => <Dataset /> },
 ] as const;
 
