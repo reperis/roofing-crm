@@ -45,6 +45,13 @@ dev:
 stage-data:
     pnpm --filter @roofing/web run stage
 
+# Chained here rather than in the shell: `&&` is a parser error in Windows PowerShell 5.1. Run
+# this whenever the Oracle pipeline republishes, or this site and the Oracle site will quietly
+# disagree about the same county.
+#
+# Re-pull the published Oracle dataset and ship it
+refresh: stage-data deploy
+
 # Deploy the CDK stack to AWS (us-east-2)
 deploy: build
     pnpm --filter @roofing/api exec cdk deploy --require-approval never

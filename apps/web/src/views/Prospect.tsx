@@ -185,12 +185,13 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
           /**
            * Colour is lead score, not provenance.
            *
-           * Provenance was the obvious choice and it was wrong: every roof age and every roofing
-           * permit Chester County has is generated — 175,579 of 175,579 and 24,427 of 24,427 —
-           * and a candidate only qualifies through one of those. So a provenance colour is
-           * constant by construction, and a legend promising a distinction the data cannot make
-           * is worse than no legend. Score is what actually varies and what decides the next
-           * door to knock on.
+           * Provenance was the obvious choice and it was wrong: every roofing permit is generated
+           * (23,449 of 23,449), and roof age is sourced for only the 7,102 parcels the county
+           * publishes a year built for — new construction from 2018-2022, whose roofs are far too
+           * young to qualify as a lead. A candidate only qualifies through one of those signals,
+           * so in practice the flag is true for every dot that reaches the map. A colour channel
+           * encoding a near-constant is worse than no legend. Score is what actually varies and
+           * what decides the next door to knock on.
            *
            * Thresholds match the score bars in the table below, so the map and the list agree
            * about what counts as a hot lead. Darker shades than the table's: these sit on a
@@ -501,9 +502,9 @@ export function Prospect() {
             <span className="legend__dot legend__dot--cold" /> under 40
           </span>
           <span className="muted">
-            Colour and size are lead score. Provenance is not on the map: every roof age and roofing
-            permit in this county is generated, so it would be the same colour for every property —
-            see the Source column below and the Dataset tab.
+            Colour and size are lead score. Provenance is not on the map: almost every roofing
+            signal in this county is generated, so the map would be one colour and tell you nothing
+            — see the Source column below and the Dataset tab.
           </span>
         </div>
       </section>

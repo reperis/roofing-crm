@@ -63,10 +63,12 @@ permit stays visibly generated after it has been assigned, worked, restaged and 
 
 It used to. It was wrong.
 
-Because every roof age and every roofing permit is synthetic, and a candidate only qualifies
-through one of those, the "generated" flag was `true` for every dot on the map. The colour channel
-encoded a constant, and a legend promising a distinction the data cannot make is worse than no
-legend at all.
+Every roofing permit is synthetic, and roof age is sourced for only the 7,102 parcels the county
+publishes a year built for — 2018-2022 new construction, whose roofs are too young to clear any
+useful age threshold. Since a candidate only qualifies through one of those two signals, the
+"generated" flag was `true` for effectively every dot that reached the map. The colour channel
+encoded a near-constant, and a legend promising a distinction the data cannot make is worse than
+no legend at all.
 
 Dots now colour by lead score — the thing that actually varies and that decides which door to
 knock on — using the same three bands as the score bars in the table, so the map and the list
