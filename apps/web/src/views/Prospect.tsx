@@ -1,7 +1,9 @@
 import {
   weakestTier,
+  type CreateLeadInput,
   type LeadCandidate,
   type LeadSourceSignal,
+  type LeadStatus,
   type ProvenanceTier,
 } from '@roofing/schema';
 import { scoreLead } from '@roofing/shared';
@@ -15,9 +17,10 @@ import {
   type StyleSpecification,
 } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AsyncBoundary } from '../components/Async';
+import { LeadDrawer } from '../components/LeadDrawer';
 import { ProvenanceTag, RoofAge, ScoreBar } from '../components/Provenance';
 import {
   DEFAULT_MIN_YEARS_OPEN,
@@ -27,7 +30,7 @@ import {
   TABLE_RESULT_LIMIT,
   WEST_CHESTER,
 } from '../data/config';
-import { createLead } from '../data/leads';
+import { createLead, listLeads } from '../data/leads';
 import { findLeadCandidates, getAreaSummary } from '../data/queries';
 import { useAsync } from '../hooks/useAsync';
 
@@ -107,7 +110,6 @@ interface MapPoint {
   longitude: number;
   latitude: number;
   score: number;
-  generated: boolean;
 }
 
 interface MapPanelProps {
@@ -188,9 +190,29 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
             100,
             7,
           ],
-          // Generated signals stay visually distinct on the map as well as in the tables.
-          // Darker than the table's tags: these sit on a light basemap, not a dark card.
-          'circle-color': ['case', ['get', 'generated'], '#d97706', '#15803d'],
+          /**
+           * Colour is lead score, not provenance.
+           *
+           * Provenance was the obvious choice and it was wrong: every roof age and every roofing
+           * permit Chester County has is generated — 175,579 of 175,579 and 24,427 of 24,427 —
+           * and a candidate only qualifies through one of those. So a provenance colour is
+           * constant by construction, and a legend promising a distinction the data cannot make
+           * is worse than no legend. Score is what actually varies and what decides the next
+           * door to knock on.
+           *
+           * Thresholds match the score bars in the table below, so the map and the list agree
+           * about what counts as a hot lead. Darker shades than the table's: these sit on a
+           * light basemap, not a dark card.
+           */
+          'circle-color': [
+            'step',
+            ['get', 'score'],
+            '#3d6a8f',
+            40,
+            '#bf8700',
+            70,
+            '#d1242f',
+          ],
           'circle-opacity': 0.85,
           'circle-stroke-width': 0.6,
           'circle-stroke-color': '#ffffff',
@@ -228,7 +250,7 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
       features: points.map((point) => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [point.longitude, point.latitude] },
-        properties: { score: point.score, generated: point.generated },
+        properties: { score: point.score },
       })),
     });
   }, [ready, points]);
@@ -236,9 +258,8 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
   return <div className="map" ref={container} />;
 }
 
-interface ScoredCandidate extends LeadCandidate {
+export interface ScoredCandidate extends LeadCandidate {
   score: number;
-  generated: boolean;
   /** Weakest provenance across everything shown in the row. */
   rowTier: ProvenanceTier;
 }
@@ -248,57 +269,72 @@ function money(value: number | null): string {
 }
 
 /**
- * Turn a map result into a CRM lead.
+ * Everything the CRM records about a property at the moment a rep decides to call.
  *
- * The snapshot sent here is the whole point: the lead records what was true about the property at
- * the moment a rep decided to call, rather than re-reading the dataset later and quietly showing
- * different numbers than the ones that justified the call.
+ * Extracted rather than inlined because a property can be converted from two places — the row
+ * button and the detail drawer — and both must send a byte-identical snapshot. If they drifted,
+ * the same parcel would carry a different record of what was true at capture time depending on
+ * which control the rep happened to click.
+ *
+ * The snapshot is the whole point of the lead model: it survives the dataset being republished,
+ * so "why did I call this person?" stays answerable weeks later.
  */
-function ConvertButton({ row }: { row: ScoredCandidate }) {
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+export function leadInputFor(row: ScoredCandidate, note?: string): CreateLeadInput {
+  return {
+    parcel_identifier: row.parcel_identifier,
+    source_signal: signalFor(row),
+    latitude: row.latitude,
+    longitude: row.longitude,
+    snapshot: {
+      address_street: row.address_street,
+      address_city: row.address_city,
+      address_zip: row.address_zip,
+      owner_name: row.owner_name,
+      owner_is_out_of_area: row.owner_is_out_of_area,
+      assessed_value: row.assessed_value,
+      last_sale_date: row.last_sale_date,
+      roof_age_years: row.roof_age_years,
+      roof_age_basis: row.roof_age_basis,
+      permit_number: row.permit_number,
+      permit_status: row.improvement_status,
+      permit_days_open: row.permit_days_open,
+      contractor_name: row.contractor_name,
+      contractor_bbb_rating: row.contractor_bbb_rating,
+      contractor_bbb_score: row.contractor_bbb_score,
+    },
+    ...(note === undefined || note.trim() === '' ? {} : { note: note.trim() }),
+  };
+}
+
+/** Convert straight from the results table, without opening the property. */
+function ConvertButton({ row, onConverted }: { row: ScoredCandidate; onConverted: () => void }) {
+  const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const convert = async () => {
     setState('saving');
     setError(null);
     try {
-      await createLead({
-        parcel_identifier: row.parcel_identifier,
-        source_signal: signalFor(row),
-        latitude: row.latitude,
-        longitude: row.longitude,
-        snapshot: {
-          address_street: row.address_street,
-          address_city: row.address_city,
-          address_zip: row.address_zip,
-          owner_name: row.owner_name,
-          owner_is_out_of_area: row.owner_is_out_of_area,
-          assessed_value: row.assessed_value,
-          last_sale_date: row.last_sale_date,
-          roof_age_years: row.roof_age_years,
-          roof_age_basis: row.roof_age_basis,
-          permit_number: row.permit_number,
-          permit_status: row.improvement_status,
-          permit_days_open: row.permit_days_open,
-          contractor_name: row.contractor_name,
-          contractor_bbb_rating: row.contractor_bbb_rating,
-          contractor_bbb_score: row.contractor_bbb_score,
-        },
-      });
-      setState('saved');
+      await createLead(leadInputFor(row));
+      onConverted();
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause));
       setState('failed');
     }
   };
 
-  if (state === 'saved') {
-    return <span className="tag tag--sourced">In pipeline</span>;
-  }
-
   return (
     <>
-      <button type="button" className="button button--small" disabled={state === 'saving'} onClick={() => void convert()}>
+      <button
+        type="button"
+        className="button button--small"
+        disabled={state === 'saving'}
+        onClick={(event) => {
+          // The row itself opens the drawer; converting must not do both.
+          event.stopPropagation();
+          void convert();
+        }}
+      >
         {state === 'saving' ? 'Saving…' : 'Convert'}
       </button>
       {error !== null && <span className="cell__sub status--error">{error}</span>}
@@ -307,7 +343,7 @@ function ConvertButton({ row }: { row: ScoredCandidate }) {
 }
 
 /** Which signal put this property on the list — drives the default outreach script. */
-function signalFor(row: ScoredCandidate): LeadSourceSignal {
+export function signalFor(row: ScoredCandidate): LeadSourceSignal {
   const agedRoof = row.roof_age_years !== null && row.roof_age_years > 0;
   const permit = row.permit_number !== null;
 
@@ -322,11 +358,34 @@ export function Prospect() {
   const [minRoofAge, setMinRoofAge] = useState(DEFAULT_ROOF_AGE_THRESHOLD);
   const [minYearsOpen, setMinYearsOpen] = useState(0);
   const [requireOpenPermit, setRequireOpenPermit] = useState(false);
+  const [selected, setSelected] = useState<ScoredCandidate | null>(null);
+  /**
+   * Bumped whenever a lead is created or restaged, to refetch the pipeline marks.
+   *
+   * The server owns lead state, so re-reading it is more honest than patching a local copy and
+   * hoping it still matches what the rest of the team sees.
+   */
+  const [leadRevision, setLeadRevision] = useState(0);
+  const onLeadChanged = useCallback(() => setLeadRevision((value) => value + 1), []);
 
   const summary = useAsync(
     () => getAreaSummary(centre, radius, minRoofAge, DEFAULT_MIN_YEARS_OPEN),
     [centre, radius, minRoofAge],
   );
+
+  /**
+   * Which parcels are already in the pipeline.
+   *
+   * Fetched once for the whole board rather than per row: a rep needs to see at a glance which
+   * doors the team has already claimed, and after a page reload a converted property would
+   * otherwise look identical to an untouched one — which is how two reps phone one homeowner.
+   */
+  const pipeline = useAsync(() => listLeads(), [leadRevision]);
+  const claimed = useMemo(() => {
+    const marks = new Map<string, LeadStatus>();
+    for (const lead of pipeline.data ?? []) marks.set(lead.parcel_identifier, lead.status);
+    return marks;
+  }, [pipeline.data]);
 
   const candidates = useAsync(
     () =>
@@ -361,7 +420,6 @@ export function Prospect() {
           ...(row.permit_provenance_tier === null ? [] : [row.permit_provenance_tier]),
           ...(row.roof_age_basis === 'synthetic' ? (['synthetic'] as const) : []),
         ]),
-        generated: row.roof_age_basis === 'synthetic' || row.permit_provenance_tier === 'synthetic',
         score: scoreLead({
           roofAgeYears: row.roof_age_years,
           roofAgeThreshold: minRoofAge,
@@ -381,7 +439,6 @@ export function Prospect() {
       latitude: row.latitude as number,
       longitude: row.longitude as number,
       score: row.score,
-      generated: row.generated,
     }));
 
   return (
@@ -448,6 +505,23 @@ export function Prospect() {
         </div>
 
         <MapPanel centre={centre} radiusMiles={radius} points={mapPoints} onPick={setCentre} />
+
+        <div className="legend">
+          <span className="legend__item">
+            <span className="legend__dot legend__dot--hot" /> 70+
+          </span>
+          <span className="legend__item">
+            <span className="legend__dot legend__dot--warm" /> 40–69
+          </span>
+          <span className="legend__item">
+            <span className="legend__dot legend__dot--cold" /> under 40
+          </span>
+          <span className="muted">
+            Colour and size are lead score. Provenance is not on the map: every roof age and
+            roofing permit in this county is generated, so it would be the same colour for every
+            property — see the Source column below and the Dataset tab.
+          </span>
+        </div>
       </section>
 
       <section className="card">
@@ -533,7 +607,20 @@ export function Prospect() {
                   </thead>
                   <tbody>
                     {scored.slice(0, TABLE_RESULT_LIMIT).map((row) => (
-                      <tr key={row.parcel_identifier}>
+                      <tr
+                        key={row.parcel_identifier}
+                        className="row--clickable"
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Open ${row.address_street ?? row.parcel_identifier}`}
+                        onClick={() => setSelected(row)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            setSelected(row);
+                          }
+                        }}
+                      >
                         <td>
                           <ScoreBar score={row.score} />
                         </td>
@@ -568,7 +655,13 @@ export function Prospect() {
                           <ProvenanceTag tier={row.rowTier} />
                         </td>
                         <td>
-                          <ConvertButton row={row} />
+                          {claimed.has(row.parcel_identifier) ? (
+                            <span className="tag tag--sourced">
+                              {claimed.get(row.parcel_identifier)}
+                            </span>
+                          ) : (
+                            <ConvertButton row={row} onConverted={onLeadChanged} />
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -579,6 +672,14 @@ export function Prospect() {
           )}
         </AsyncBoundary>
       </section>
+
+      {selected !== null && (
+        <LeadDrawer
+          candidate={selected}
+          onClose={() => setSelected(null)}
+          onLeadChanged={onLeadChanged}
+        />
+      )}
     </div>
   );
 }
