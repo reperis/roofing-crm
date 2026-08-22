@@ -31,8 +31,11 @@ const SOURCE_NOTES = [
     signal: 'Roof age',
     status: 'generated' as const,
     detail:
-      'No Chester County source publishes year built or roof age, including the CAMA-backed ' +
-      'assessment layer. Generated deterministically per parcel and always labelled.',
+      'The CAMA-backed assessment layer publishes no year built, so roof age is generated ' +
+      'deterministically per parcel and always labelled. The one exception: the county Planning ' +
+      'Commission publishes a year built for 7,102 new-construction parcels (2018-2022), and ' +
+      'those carry a sourced roof age. Their roofs are far too young to clear a lead threshold, ' +
+      'so in practice every candidate here rests on a generated age.',
   },
   {
     signal: 'Roofing permits',

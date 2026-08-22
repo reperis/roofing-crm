@@ -82,17 +82,22 @@ data gathering is a separate story.
 | | |
 |---|---|
 | Properties | **193,229** |
-| Permits | **74,834** (50,407 sourced, 24,427 generated) |
-| Roofing permits | 24,427, of which **5,436 still open** |
-| Within 5 mi of West Chester | 33,877 properties · 16,074 roofs over 15 yr · 958 open roofing permits · 348 open over 5 yr · 1,421 out-of-area owners |
+| Permits | **73,856** (50,407 sourced, 23,449 generated) |
+| Roofing permits | 23,449, of which **5,177 still open** |
+| Within 5 mi of West Chester | 33,877 properties · 15,652 roofs over 15 yr · 923 open roofing permits · 326 open over 5 yr · 1,421 out-of-area owners |
 | Query latency | **9–53 ms**, in the browser, no query server |
 
 ## Provenance
 
-Roof age, roofing permits, contractor identity and BBB ratings are **generated** — Chester County
-issues no building permits, publishes no year built, and the state contractor registry and BBB
-both refuse automated access. Every one of those values is marked as generated in the data and in
-the interface, and a lead built on one stays marked for life.
+Roofing permits, contractor identity and BBB ratings are **generated** — Chester County issues no
+building permits, and the state contractor registry and BBB both refuse automated access. Roof age
+is generated too, with one exception: the county Planning Commission publishes a year built for
+7,102 new-construction parcels, and those carry a sourced age. Those roofs are 4–8 years old, far
+too young to clear a lead threshold, so every candidate this CRM surfaces still rests on a
+generated signal.
+
+Every generated value is marked as such in the data and in the interface, and a lead built on one
+stays marked for life.
 
 Full detail, including why each source is unavailable: [docs/provenance.md](docs/provenance.md).
 
