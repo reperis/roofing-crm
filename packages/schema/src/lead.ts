@@ -9,14 +9,7 @@ import { provenanceTierSchema, roofAgeBasisSchema } from './provenance';
  * board UI sorts on and what conversion counts are computed from. `lost` sits at the end as a
  * terminal state rather than a stage anyone advances into on purpose.
  */
-export const leadStatuses = [
-  'new',
-  'contacted',
-  'qualified',
-  'quoted',
-  'won',
-  'lost',
-] as const;
+export const leadStatuses = ['new', 'contacted', 'qualified', 'quoted', 'won', 'lost'] as const;
 
 export const leadStatusSchema = z.enum(leadStatuses);
 export type LeadStatus = z.infer<typeof leadStatusSchema>;

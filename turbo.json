@@ -1,5 +1,6 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "//": "Two package-specific overrides, both load-bearing. @roofing/web#build declares public/** as an input because the staged Oracle dataset lives there and is gitignored: turbo hashes git-tracked files by default, so without this a freshly staged dataset does not change the build hash, turbo replays a cached dist/, and the deploy silently ships the previous data. @roofing/api#test depends on that build because it synthesises the CDK stack, which reads apps/web/dist as a deployment asset \u2014 declared here rather than relying on CI step order, since `pnpm test` on its own has to work too.",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -9,15 +10,20 @@
       "cache": false,
       "persistent": true
     },
-    "lint": {
-      "dependsOn": ["^build"]
-    },
     "typecheck": {
       "dependsOn": ["^build"]
     },
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
+    },
+    "@roofing/web#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "public/**"],
+      "outputs": ["dist/**"]
+    },
+    "@roofing/api#test": {
+      "dependsOn": ["^build", "@roofing/web#build"]
     }
   }
 }

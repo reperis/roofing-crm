@@ -158,22 +158,24 @@ export async function updateLead(
     values[':note'] = [{ note_id: `${timestamp}#n`, body: input.note, created_at: timestamp }];
   }
 
-  const result = await client.send(
-    new UpdateCommand({
-      TableName: config.tableName,
-      Key: { lead_id: leadId },
-      UpdateExpression: `SET ${sets.join(', ')}`,
-      // Refuse to resurrect a deleted lead as a stub: without this, updating an id that does not
-      // exist would happily create a record with a status and nothing else.
-      ConditionExpression: 'attribute_exists(lead_id)',
-      ExpressionAttributeNames: names,
-      ExpressionAttributeValues: values,
-      ReturnValues: 'ALL_NEW',
-    }),
-  ).catch((error: unknown) => {
-    if (error instanceof Error && error.name === 'ConditionalCheckFailedException') return null;
-    throw error;
-  });
+  const result = await client
+    .send(
+      new UpdateCommand({
+        TableName: config.tableName,
+        Key: { lead_id: leadId },
+        UpdateExpression: `SET ${sets.join(', ')}`,
+        // Refuse to resurrect a deleted lead as a stub: without this, updating an id that does not
+        // exist would happily create a record with a status and nothing else.
+        ConditionExpression: 'attribute_exists(lead_id)',
+        ExpressionAttributeNames: names,
+        ExpressionAttributeValues: values,
+        ReturnValues: 'ALL_NEW',
+      }),
+    )
+    .catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'ConditionalCheckFailedException') return null;
+      throw error;
+    });
 
   return result === null ? null : leadSchema.parse(result.Attributes);
 }

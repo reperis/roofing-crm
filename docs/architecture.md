@@ -150,9 +150,14 @@ the number a rep sees on the map is the number stored on the lead.
 
 ## Deviations from the golden path
 
-None material. TypeScript everywhere, AWS `us-east-2`, CDK as the only IaC, Vitest, Prettier +
-ESLint, `tsc` for typecheck, Powertools on every Lambda, LLM access through the Vercel AI SDK
-rather than a provider SDK.
+TypeScript everywhere, AWS `us-east-2`, CDK as the only IaC, Vitest, Prettier, `tsc` for
+typecheck, Powertools on every Lambda, LLM access through the Vercel AI SDK rather than a provider
+SDK.
+
+One deviation worth naming: **ESLint is not run.** `typescript-eslint` 8.x refuses to load against
+TypeScript 7.0 upstream, so there is no configuration it could run with. Pinning TypeScript back a
+major version to satisfy a linter would be the larger compromise, so the gate is `tsc --noEmit`
+plus Prettier — the same four steps CI runs, and the same four `just check` runs locally.
 
 Two conscious choices worth naming:
 

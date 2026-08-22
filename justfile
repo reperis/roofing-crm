@@ -1,5 +1,8 @@
-set windows-shell := ["bash", "-euo", "pipefail", "-c"]
-set shell := ["bash", "-euo", "pipefail", "-c"]
+# cmd.exe rather than bare `bash`: on Windows `just` resolves `bash` against PATH, and where WSL is
+# installed that is the WSL launcher in System32 — a Linux environment with no Node in it. Every
+# recipe below is a single command with no shell syntax, so the choice of shell does not matter as
+# long as it is not silently the wrong operating system.
+set windows-shell := ["cmd.exe", "/c"]
 
 # Show available recipes
 default:
@@ -11,27 +14,36 @@ setup:
 
 # Format all sources
 format:
-    pnpm prettier --write .
+    pnpm format
 
-# Lint all sources
-lint:
-    pnpm eslint .
+# Everything CI checks, in the order CI checks it
+check: format-check type-check test build
+
+# Fail if anything is unformatted, rather than rewriting it
+format-check:
+    pnpm format:check
 
 # Type-check every workspace package
 type-check:
-    pnpm turbo typecheck
+    pnpm typecheck
 
 # Run the unit and integration suites
 test:
-    pnpm turbo test
+    pnpm test
 
 # Build every workspace package
 build:
-    pnpm turbo build
+    pnpm build
 
 # Run the web app against the staged dataset (http://localhost:5173)
 dev:
-    pnpm turbo dev
+    pnpm dev
+
+# Pull the published Oracle dataset into the web app so the site can serve it same-origin.
+# Data collection is out of scope for this story: these artifacts are produced by the Oracle
+# pipeline and consumed here read-only. Override the source with ORACLE_ORIGIN.
+stage-data:
+    pnpm --filter @roofing/web run stage
 
 # Deploy the CDK stack to AWS (us-east-2)
 deploy: build
@@ -44,13 +56,3 @@ synth:
 # One-time CDK bootstrap for the target account/region
 bootstrap:
     pnpm --filter @roofing/api exec cdk bootstrap
-
-# Pull the published Oracle dataset into the web app so the site can serve it same-origin.
-# Data collection is out of scope for this story: these artifacts are produced by the Oracle
-# pipeline and consumed here read-only.
-stage-data ORACLE_ORIGIN='https://d3dix6yacibswc.cloudfront.net':
-    mkdir -p apps/web/public/dataset
-    curl -fsSL -o apps/web/public/dataset/query-table.parquet {{ORACLE_ORIGIN}}/dataset/query-table.parquet
-    curl -fsSL -o apps/web/public/dataset/permit-table.parquet {{ORACLE_ORIGIN}}/dataset/permit-table.parquet
-    curl -fsSL -o apps/web/public/dataset/run-ledger.json {{ORACLE_ORIGIN}}/dataset/run-ledger.json
-    @ls -lh apps/web/public/dataset/

@@ -9,20 +9,19 @@
   },
   "scripts": {
     "build": "turbo build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "dev": "turbo dev",
-    "lint": "turbo lint",
     "test": "turbo test",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
-    "eslint": "^10.9.0",
+    "esbuild": "^0.28.2",
     "jiti": "^2.7.0",
     "prettier": "^3.9.6",
     "turbo": "^2.10.11",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.11"
   }
 }

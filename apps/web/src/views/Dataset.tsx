@@ -131,7 +131,9 @@ export function Dataset() {
                   <td>{note.signal}</td>
                   <td>
                     <span
-                      className={note.status === 'sourced' ? 'tag tag--sourced' : 'tag tag--generated'}
+                      className={
+                        note.status === 'sourced' ? 'tag tag--sourced' : 'tag tag--generated'
+                      }
                     >
                       {note.status === 'sourced' ? 'Sourced' : 'Generated'}
                     </span>

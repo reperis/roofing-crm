@@ -115,9 +115,9 @@ export function Pipeline() {
       <section className="card">
         <h2>Pipeline</h2>
         <p className="card__lede">
-          Leads converted from the map. Records persist server-side, so the whole team sees the
-          same board — and a lead keeps the signal values it was created from, even after the
-          county dataset is republished.
+          Leads converted from the map. Records persist server-side, so the whole team sees the same
+          board — and a lead keeps the signal values it was created from, even after the county
+          dataset is republished.
         </p>
 
         <div className="controls">
@@ -154,7 +154,9 @@ export function Pipeline() {
         >
           {(data) => (
             <>
-              <p className="muted">{data.length} lead{data.length === 1 ? '' : 's'}.</p>
+              <p className="muted">
+                {data.length} lead{data.length === 1 ? '' : 's'}.
+              </p>
               <div className="table-scroll">
                 <table className="table">
                   <thead>

@@ -1,0 +1,13 @@
+# Force LF on checkout, on every platform.
+#
+# Git stores these blobs as LF, but a Windows clone with core.autocrlf=true — the default from the
+# Git for Windows installer — writes CRLF into the working tree. Prettier is configured for LF, so
+# `just check` then fails on every file in the repository for a reviewer who did nothing wrong.
+# `eol=lf` makes the working tree match what is stored.
+* text=auto eol=lf
+
+# Kept out of the text pipeline entirely; these are gitignored today, but line-ending translation
+# on a Parquet file would corrupt it rather than fail loudly.
+*.parquet binary
+*.duckdb  binary
+*.wasm    binary

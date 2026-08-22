@@ -64,7 +64,7 @@ async function bootstrap(): Promise<CrmDb> {
 
   return {
     source,
-    query: async <T,>(sql: string): Promise<T[]> => {
+    query: async <T>(sql: string): Promise<T[]> => {
       const result = await connection.query(sql);
       return result.toArray().map((row) => {
         const record = row.toJSON() as Record<string, unknown>;

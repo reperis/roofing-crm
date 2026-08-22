@@ -181,15 +181,7 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
         paint: {
           // Hotter leads render larger, so the shape of the opportunity is visible at a glance
           // without reading a single row of the table.
-          'circle-radius': [
-            'interpolate',
-            ['linear'],
-            ['get', 'score'],
-            0,
-            2.5,
-            100,
-            7,
-          ],
+          'circle-radius': ['interpolate', ['linear'], ['get', 'score'], 0, 2.5, 100, 7],
           /**
            * Colour is lead score, not provenance.
            *
@@ -204,15 +196,7 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
            * about what counts as a hot lead. Darker shades than the table's: these sit on a
            * light basemap, not a dark card.
            */
-          'circle-color': [
-            'step',
-            ['get', 'score'],
-            '#3d6a8f',
-            40,
-            '#bf8700',
-            70,
-            '#d1242f',
-          ],
+          'circle-color': ['step', ['get', 'score'], '#3d6a8f', 40, '#bf8700', 70, '#d1242f'],
           'circle-opacity': 0.85,
           'circle-stroke-width': 0.6,
           'circle-stroke-color': '#ffffff',
@@ -517,9 +501,9 @@ export function Prospect() {
             <span className="legend__dot legend__dot--cold" /> under 40
           </span>
           <span className="muted">
-            Colour and size are lead score. Provenance is not on the map: every roof age and
-            roofing permit in this county is generated, so it would be the same colour for every
-            property — see the Source column below and the Dataset tab.
+            Colour and size are lead score. Provenance is not on the map: every roof age and roofing
+            permit in this county is generated, so it would be the same colour for every property —
+            see the Source column below and the Dataset tab.
           </span>
         </div>
       </section>
@@ -549,9 +533,7 @@ export function Prospect() {
                 <span className="stat__value">
                   {data.long_open_permits.toLocaleString('en-US')}
                 </span>
-                <span className="stat__label">
-                  open over {DEFAULT_MIN_YEARS_OPEN} yr
-                </span>
+                <span className="stat__label">open over {DEFAULT_MIN_YEARS_OPEN} yr</span>
               </div>
               <div className="stat">
                 <span className="stat__value">{data.absentee_owners.toLocaleString('en-US')}</span>

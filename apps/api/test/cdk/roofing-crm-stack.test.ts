@@ -8,6 +8,9 @@ import { RoofingCrmStack } from '../../cdk/lib/roofing-crm-stack';
 describe('RoofingCrmStack', () => {
   let template: Template;
 
+  // Synthesis bundles the Lambda with esbuild, which is slow the first time and slower on a cold
+  // CI runner. Vitest's 10s default hook timeout is sized for unit tests, not for a build, and
+  // exceeding it fails the suite in a way that reads like a broken stack rather than a slow one.
   beforeAll(() => {
     const app = new cdk.App();
     const stack = new RoofingCrmStack(app, 'TestStack', {
@@ -15,7 +18,7 @@ describe('RoofingCrmStack', () => {
       tags: { project_name: PROJECT_NAME },
     });
     template = Template.fromStack(stack);
-  });
+  }, 120_000);
 
   it('serves the CRM over HTTPS only', () => {
     // Reps reach this from a browser with no credentials; an http:// origin would be a

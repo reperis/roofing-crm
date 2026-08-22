@@ -129,7 +129,9 @@ export function buildTools(context: ToolContext) {
       inputSchema: z.object({
         latitude: latitude
           .optional()
-          .describe('Centre of the search. Defaults to West Chester if the question names no place.'),
+          .describe(
+            'Centre of the search. Defaults to West Chester if the question names no place.',
+          ),
         longitude: longitude.optional(),
         radiusMiles: z.number().min(0.1).max(30).default(5),
         minRoofAgeYears: z
@@ -218,7 +220,9 @@ export function buildTools(context: ToolContext) {
         const { properties, permits } = await getDataset();
         const minDays = Math.round(input.minYearsOpen * 365);
 
-        const byParcel = new Map(properties.map((property) => [property.parcel_identifier, property]));
+        const byParcel = new Map(
+          properties.map((property) => [property.parcel_identifier, property]),
+        );
         const needle = input.contractorNameContains?.toLowerCase();
 
         let open = [...longestOpenRoofingPermits(permits).values()].filter(
@@ -270,15 +274,14 @@ export function buildTools(context: ToolContext) {
     }),
 
     getPropertyPermits: tool({
-      description: 'Every permit on one parcel, roofing first. Use when asked about a specific property.',
+      description:
+        'Every permit on one parcel, roofing first. Use when asked about a specific property.',
       inputSchema: z.object({
         parcelIdentifier: z.string().min(1).max(40),
       }),
       execute: async (input) => {
         const { properties, permits } = await getDataset();
-        const property = properties.find(
-          (row) => row.parcel_identifier === input.parcelIdentifier,
-        );
+        const property = properties.find((row) => row.parcel_identifier === input.parcelIdentifier);
 
         if (property === undefined) {
           return { found: false, parcel_identifier: input.parcelIdentifier };
@@ -320,7 +323,8 @@ export function buildTools(context: ToolContext) {
           properties: properties.length,
           permits: permits.length,
           roofing_permits: roofing.length,
-          open_roofing_permits: roofing.filter((permit) => permit.permit_close_date === null).length,
+          open_roofing_permits: roofing.filter((permit) => permit.permit_close_date === null)
+            .length,
           sourced_permits: permits.filter((p) => p.provenance_tier === 'authoritative').length,
           generated_permits: permits.filter((p) => p.provenance_tier === 'synthetic').length,
           generated_signals: [

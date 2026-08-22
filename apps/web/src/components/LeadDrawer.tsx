@@ -149,7 +149,9 @@ function PipelinePanel({ candidate, onLeadChanged }: PipelinePanelProps) {
                   {existing.notes.map((entry) => (
                     <li key={entry.note_id}>
                       {entry.body}
-                      <span className="cell__sub">{entry.created_at.slice(0, 16).replace('T', ' ')}</span>
+                      <span className="cell__sub">
+                        {entry.created_at.slice(0, 16).replace('T', ' ')}
+                      </span>
                     </li>
                   ))}
                 </ul>

@@ -124,7 +124,10 @@ async function readTable(
   columns: readonly string[],
 ): Promise<Record<string, unknown>[]> {
   const buffer = await bufferFrom(bucket, key);
-  const file = { byteLength: buffer.byteLength, slice: (s: number, e?: number) => buffer.slice(s, e) };
+  const file = {
+    byteLength: buffer.byteLength,
+    slice: (s: number, e?: number) => buffer.slice(s, e),
+  };
   const metadata = await parquetMetadataAsync(file);
 
   const rows = await parquetReadObjects({

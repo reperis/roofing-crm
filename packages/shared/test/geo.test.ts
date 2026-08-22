@@ -30,11 +30,15 @@ describe('radiusBoundingBox', () => {
 
     // Every compass point at exactly the radius must fall inside the box, or the bbox prefilter
     // would discard rows the haversine pass was supposed to judge.
-    const north = { latitude: WEST_CHESTER.latitude + radius / 69.0, longitude: WEST_CHESTER.longitude };
+    const north = {
+      latitude: WEST_CHESTER.latitude + radius / 69.0,
+      longitude: WEST_CHESTER.longitude,
+    };
     const east = {
       latitude: WEST_CHESTER.latitude,
       longitude:
-        WEST_CHESTER.longitude + radius / (69.0 * Math.cos((WEST_CHESTER.latitude * Math.PI) / 180)),
+        WEST_CHESTER.longitude +
+        radius / (69.0 * Math.cos((WEST_CHESTER.latitude * Math.PI) / 180)),
     };
 
     expect(north.latitude).toBeLessThanOrEqual(box.maxLat);

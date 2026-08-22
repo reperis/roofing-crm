@@ -107,9 +107,9 @@ export function Ask() {
       <section className="card">
         <h2>Ask about the territory</h2>
         <p className="card__lede">
-          Ask in plain English. The assistant searches the same Chester County records the map
-          uses, reads your pipeline, and can add a property to it. It answers only from what the
-          data actually says — and tells you when a value is generated rather than sourced.
+          Ask in plain English. The assistant searches the same Chester County records the map uses,
+          reads your pipeline, and can add a property to it. It answers only from what the data
+          actually says — and tells you when a value is generated rather than sourced.
         </p>
 
         <form
@@ -166,8 +166,8 @@ export function Ask() {
           {reply.toolCalls.length > 0 && (
             <details className="trace">
               <summary>
-                {reply.toolCalls.length} data lookup{reply.toolCalls.length === 1 ? '' : 's'} —
-                show what was searched
+                {reply.toolCalls.length} data lookup{reply.toolCalls.length === 1 ? '' : 's'} — show
+                what was searched
               </summary>
               <ul className="trace__list">
                 {reply.toolCalls.map((call, index) => (

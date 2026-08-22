@@ -1,0 +1,51 @@
+# The same gate `just check` runs locally, on every push and pull request.
+#
+# It deliberately needs no secrets. Formatting, types, tests and the site build all run against the
+# repository alone — the staged Oracle dataset is gitignored and the build tolerates its absence — so a fork can
+# run this without any access to AWS, the Oracle runtime or the deployed site.
+#
+# The steps are split rather than run as one command so a failure names itself in the Actions UI.
+# The commands themselves live in package.json, which is also all `just check` calls — neither side
+# defines what "checked" means, so the two cannot drift.
+name: check
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  # A newer push supersedes an in-flight run on the same ref; nothing is learned from finishing the
+  # older one.
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # No version pinned here: the action reads `packageManager` from package.json, so the lockfile
+      # and CI can never disagree about which pnpm produced it.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # matches `engines.node`
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Format
+        run: pnpm format:check
+
+      - name: Types
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
