@@ -88,10 +88,14 @@ Each of these was a real, observed failure, fixed in `src/agent/prompt.ts`:
 
 ## Verified behaviour
 
+Figures below are anchored to dataset run `run-2026-08-22T22-33-22-490Z`. Anchoring them is
+deliberate: an unqualified count in a document silently becomes wrong the moment the upstream
+pipeline republishes, and a stale number in a provenance document is worse than no number.
+
 | Question                                                | Result                                                 |
 | ------------------------------------------------------- | ------------------------------------------------------ |
-| Open roofing permits >5 yrs within 5 mi of West Chester | 348 — matches the SQL figure exactly                   |
-| Roofs >20 yrs with an out-of-area owner                 | 10,197 matched, 25 read, correctly qualified           |
+| Open roofing permits >5 yrs within 5 mi of West Chester | 326 — matches the Prospect tile exactly                |
+| Roofs >20 yrs with an out-of-area owner                 | 2,248 matched, 25 read, correctly qualified            |
 | What is in my pipeline                                  | Read the leads from DynamoDB                           |
 | Add parcel 52-5H-82 to my pipeline                      | Wrote `lead#52-5H-82`, confirmed via the REST API      |
 | How reliable is this data                               | Cited real counts and named all four generated signals |

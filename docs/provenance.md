@@ -21,18 +21,21 @@ the two systems could drift into disagreeing about what "sourced" means.
 
 ## What is sourced, and what is not
 
-| Signal                                       | Status        | Why                                                                                                                                                                                            |
-| -------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Parcels, owners, assessed values, sale dates | **Sourced**   | Chester County parcel layer, refreshed weekly. Includes owner mailing address, which is what makes absentee-owner questions answerable.                                                        |
-| Well and sewage permits                      | **Sourced**   | County EnerGov system. Not roofing work — but real permits with real statuses and open dates, which is what proves the permit model against genuine records.                                   |
-| Roof age                                     | **Generated** | No Chester County source publishes year built or roof age, including the CAMA-backed assessment layer.                                                                                         |
-| Roofing permits                              | **Generated** | The county issues no building permits at all; all 73 municipalities permit independently, and West Chester Borough — the story's own demo target — disallows automated access in `robots.txt`. |
-| Contractor identity                          | **Generated** | Pennsylvania's Home Improvement Contractor registry returns HTTP 403 to every automated request and publishes no API or bulk export.                                                           |
-| BBB ratings                                  | **Generated** | BBB's public site is behind an interstitial, its API returns 401 to non-partners, and its terms prohibit automated collection.                                                                 |
+| Signal                                       | Status               | Why                                                                                                                                                                                                                      |
+| -------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Parcels, owners, assessed values, sale dates | **Sourced**          | Chester County parcel layer, refreshed weekly. Includes owner mailing address, which is what makes absentee-owner questions answerable.                                                                                  |
+| Well and sewage permits                      | **Sourced**          | County EnerGov system. Not roofing work — but real permits with real statuses and open dates, which is what proves the permit model against genuine records.                                                             |
+| Roof age                                     | **Mostly generated** | The CAMA-backed assessment layer publishes no year built. The county Planning Commission publishes one for 7,102 new-construction parcels (2018-2022), and those carry a sourced age; every other parcel's is generated. |
+| Roofing permits                              | **Generated**        | The county issues no building permits at all; all 73 municipalities permit independently, and West Chester Borough — the story's own demo target — disallows automated access in `robots.txt`.                           |
+| Contractor identity                          | **Generated**        | Pennsylvania's Home Improvement Contractor registry returns HTTP 403 to every automated request and publishes no API or bulk export.                                                                                     |
+| BBB ratings                                  | **Generated**        | BBB's public site is behind an interstitial, its API returns 401 to non-partners, and its terms prohibit automated collection.                                                                                           |
 
-Counts on the deployed dataset: **175,579 of 175,579** roof ages are synthetic, and **24,427 of
-24,427** roofing permits are synthetic. There are no exceptions — which has a design consequence,
-below.
+Counts on the deployed dataset (run `run-2026-08-22T22-33-22-490Z`): **168,599 of 175,701** roof
+ages are synthetic, and **23,449 of 23,449** roofing permits are synthetic.
+
+The 7,102 exceptions are the parcels the county publishes a year built for. Their roofs are 4-8
+years old — far too young to clear any useful age threshold — so **every lead this CRM surfaces
+still qualifies through a generated signal**, which is the design consequence below.
 
 ## Trust propagates from the weakest input
 

@@ -8,7 +8,7 @@ map pan, radius change and filter — run with no server at all, and only the pa
 cost anything to operate.
 
 The result is a product whose standing cost is a few cents of S3 storage a month, and which still
-searches 193,229 properties and 74,834 permits in well under a second.
+searches 193,229 properties and 73,856 permits in well under a second.
 
 ## Two halves
 
@@ -66,7 +66,7 @@ only one of those is reachable from a browser tab. So the tool loop runs in Lamb
 read both and also write a lead when asked.
 
 Tools read Parquet with **hyparquet**, a pure-JS reader. No native binary, no Lambda layer, no
-architecture-matched build step. Measured cold: 74,834 permits in **123 ms**, 193,229 properties
+architecture-matched build step. Measured cold: the permit table in **123 ms**, the property table
 across fourteen columns in **391 ms**, roughly 200 MB of heap. Parsed once per container and
 cached, so only a cold start pays.
 
@@ -95,7 +95,14 @@ and API Gateway throttling.
 
 ## Findings from deploying
 
-Six things that only surfaced against real infrastructure. Each is now covered by a test.
+Six things that only surfaced against real infrastructure.
+
+Three are locked in by a test: the SPA-fallback rewrite and the CORS origin-request policy are
+asserted against the synthesised CloudFormation template, and the DynamoDB reserved word is
+covered by the lead-store suite. The other three — WASM compression, DuckDB-WASM URL resolution
+and the MapLibre worker — are build- and browser-level behaviours with no test behind them, since
+this repository has no frontend test suite. They are documented here rather than counted as
+covered.
 
 1. **CloudFront does not compress objects over 10 MB.** The DuckDB WASM runtime is ~34 MB, so it
    shipped raw. `apps/web/scripts/compress-wasm.ts` gzips at build time and a second
