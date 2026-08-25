@@ -75,21 +75,33 @@ export interface LeadCandidateFilters {
  * on a newer roof is a lead. Requiring both would collapse the list to the rare parcels that have
  * both and quietly hide most of the territory's opportunity — the opposite of what a lead-finding
  * tool is for. `requireOpenPermit` narrows it to permits on demand.
+ *
+ * Each threshold qualifies **its own** signal and filters nothing else. That distinction is the
+ * whole point and it was wrong once: the stall floor used to be applied to the property, so a
+ * parcel whose roof qualified on its own was dropped because it happened to also carry a permit
+ * younger than the threshold. The list then showed fewer candidates than the "aged roofs" tile
+ * directly above it claimed existed — 15,508 against 15,652, five miles out from West Chester.
+ *
+ * Split out from execution so the predicate can be tested against a real database. The bug was in
+ * SQL semantics, and a test that asserted the shape of a string would not have caught it.
  */
-export async function findLeadCandidates(
+export function buildLeadCandidateSql(
   centre: LatLon,
   radiusMiles: number,
   filters: LeadCandidateFilters,
-): Promise<LeadCandidate[]> {
-  const db = await getDb();
+): string {
   const minDaysOpen = Math.round(filters.minYearsOpen * 365);
 
-  const permitJoin = filters.requireOpenPermit ? 'JOIN' : 'LEFT JOIN';
-  const roofClause = filters.requireOpenPermit
-    ? 'TRUE'
-    : `(p.roof_age_years > ${filters.minRoofAge} OR m.permit_number IS NOT NULL)`;
+  // A permit only counts once it has been open at least as long as the stall floor.
+  const permitSignal = `(m.permit_number IS NOT NULL AND m.days_open >= ${minDaysOpen})`;
+  const roofSignal = `p.roof_age_years > ${filters.minRoofAge}`;
 
-  return db.query<LeadCandidate>(`
+  // Requiring a permit narrows to that signal alone; roof age plays no part, which is why the
+  // slider is disabled in that mode rather than left looking live.
+  const qualifies = filters.requireOpenPermit ? permitSignal : `(${roofSignal} OR ${permitSignal})`;
+  const permitJoin = filters.requireOpenPermit ? 'JOIN' : 'LEFT JOIN';
+
+  return `
     WITH open_roofing AS (${LONGEST_OPEN_ROOFING_PERMIT})
     SELECT p.parcel_identifier, p.address_street, p.address_city, p.address_zip,
            p.latitude, p.longitude, p.owner_name, p.owner_is_out_of_area,
@@ -104,11 +116,19 @@ export async function findLeadCandidates(
     FROM properties AS p
     ${permitJoin} open_roofing AS m USING (parcel_identifier)
     WHERE ${radiusPredicate(centre, radiusMiles, 'p')}
-      AND (m.days_open IS NULL OR m.days_open >= ${minDaysOpen})
-      AND ${roofClause}
+      AND ${qualifies}
     ORDER BY m.days_open DESC NULLS LAST, p.roof_age_years DESC NULLS LAST
     LIMIT ${filters.limit};
-  `);
+  `;
+}
+
+export async function findLeadCandidates(
+  centre: LatLon,
+  radiusMiles: number,
+  filters: LeadCandidateFilters,
+): Promise<LeadCandidate[]> {
+  const db = await getDb();
+  return db.query<LeadCandidate>(buildLeadCandidateSql(centre, radiusMiles, filters));
 }
 
 export interface AreaSummary {

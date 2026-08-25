@@ -2,6 +2,7 @@ import { Logger } from '@aws-lambda-powertools/logger';
 import { createLeadInputSchema, leadStatusSchema, updateLeadInputSchema } from '@roofing/schema';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 
+import { parseJsonBody } from '../http';
 import { getLead, listLeads, updateLead, upsertLead, type StoreConfig } from './store';
 
 /**
@@ -65,7 +66,12 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     }
 
     if (method === 'POST') {
-      const parsed = createLeadInputSchema.safeParse(JSON.parse(event.body ?? '{}'));
+      const body = parseJsonBody(event.body);
+      if (body === null) {
+        return json(400, { error: 'The request body is not valid JSON.' });
+      }
+
+      const parsed = createLeadInputSchema.safeParse(body);
       if (!parsed.success) {
         return json(400, { error: 'Invalid lead.', detail: parsed.error.issues });
       }
@@ -76,7 +82,12 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     }
 
     if (method === 'PATCH' && leadId !== undefined) {
-      const parsed = updateLeadInputSchema.safeParse(JSON.parse(event.body ?? '{}'));
+      const body = parseJsonBody(event.body);
+      if (body === null) {
+        return json(400, { error: 'The request body is not valid JSON.' });
+      }
+
+      const parsed = updateLeadInputSchema.safeParse(body);
       if (!parsed.success) {
         return json(400, { error: 'Invalid update.', detail: parsed.error.issues });
       }

@@ -158,8 +158,20 @@ the number a rep sees on the map is the number stored on the lead.
 ## Deviations from the golden path
 
 TypeScript everywhere, AWS `us-east-2`, CDK as the only IaC, Vitest, Prettier, `tsc` for
-typecheck, Powertools on every Lambda, LLM access through the Vercel AI SDK rather than a provider
+typecheck, Powertools Logger on every Lambda, LLM access through the Vercel AI SDK rather than a provider
 SDK.
+
+One trade worth naming plainly: **the leads API is unauthenticated.** `POST` and `PATCH`
+`/api/leads` are reachable by anyone who finds the URL, over a store holding owner names and
+addresses drawn from public county records.
+
+That is not an oversight. The assignment requires a live runtime a reviewer can exercise without
+credentials, and any auth worth having would break exactly that. The exposure is bounded rather
+than ignored: API Gateway throttles the stage to 20 requests a second with a burst of 40, writes
+are idempotent per parcel so a replay updates one record instead of creating many, and the score
+and provenance on a lead are recomputed server-side rather than accepted from the caller. For a
+real deployment the first thing to add is an identity on the write routes, and the read path can
+stay open.
 
 One deviation worth naming: **ESLint is not run.** `typescript-eslint` 8.x refuses to load against
 TypeScript 7.0 upstream, so there is no configuration it could run with. Pinning TypeScript back a

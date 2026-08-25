@@ -22,6 +22,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@duckdb/node-api": "1.5.5-r.4",
     "@roofing/tsconfig": "workspace:*",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

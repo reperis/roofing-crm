@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import { SYSTEM_PROMPT } from './prompt';
 import { getAnthropicApiKey } from './secret';
+import { parseJsonBody } from '../http';
 import { reserveCall } from './spend-guard';
 import { buildTools } from './tools';
 
@@ -64,7 +65,12 @@ export async function handler(event: APIGatewayProxyEventV2): Promise<APIGateway
     return reply(500, { error: 'The agent is not configured.' });
   }
 
-  const parsed = agentRequest.safeParse(JSON.parse(event.body ?? '{}'));
+  const body = parseJsonBody(event.body);
+  if (body === null) {
+    return reply(400, { error: 'The request body is not valid JSON.' });
+  }
+
+  const parsed = agentRequest.safeParse(body);
   if (!parsed.success) {
     return reply(400, { error: 'Ask a question between 3 and 500 characters.' });
   }

@@ -449,7 +449,12 @@ export function Prospect() {
             <output>{radius} mi</output>
           </label>
 
-          <label>
+          {/*
+            Disabled rather than ignored. Requiring an open permit narrows to that signal alone, so
+            roof age genuinely plays no part — and a slider that moves while changing nothing is a
+            worse lie than one that visibly does not apply.
+          */}
+          <label className={requireOpenPermit ? 'control--inactive' : ''}>
             Roof older than
             <input
               type="range"
@@ -457,9 +462,10 @@ export function Prospect() {
               max={40}
               step={1}
               value={minRoofAge}
+              disabled={requireOpenPermit}
               onChange={(event) => setMinRoofAge(Number(event.target.value))}
             />
-            <output>{minRoofAge} yr</output>
+            <output>{requireOpenPermit ? 'not applied' : `${minRoofAge} yr`}</output>
           </label>
 
           <label>

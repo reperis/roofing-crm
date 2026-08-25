@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Markdown } from '../components/Markdown';
 import { resolveApiBase } from '../data/config';
 
 /**
@@ -161,7 +162,13 @@ export function Ask() {
       {reply !== null && (
         <section className="card">
           <h2>Answer</h2>
-          <p className="answer">{reply.answer}</p>
+          {/*
+            Rendered, not printed. The model writes bold lead sentences and bulleted findings, and
+            a rep reading literal **asterisks** is reading a defect.
+          */}
+          <div className="answer">
+            <Markdown text={reply.answer} />
+          </div>
 
           {reply.toolCalls.length > 0 && (
             <details className="trace">

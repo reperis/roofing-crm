@@ -396,6 +396,18 @@ body {
   accent-color: var(--accent);
 }
 
+/*
+ * A control that does not apply says so, rather than moving and changing nothing. Reserving the
+ * space keeps the row from reflowing when the checkbox is toggled.
+ */
+.control--inactive {
+  opacity: 0.45;
+}
+
+.control--inactive input[type='range'] {
+  cursor: not-allowed;
+}
+
 .controls input[type='checkbox'] {
   accent-color: var(--accent);
 }
