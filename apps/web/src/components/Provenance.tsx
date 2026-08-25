@@ -36,9 +36,19 @@ export function ProvenanceTag({ tier }: { tier: Tier }) {
   );
 }
 
+/**
+ * Plain-English copy for each basis the published column emits.
+ *
+ * 'unknown' reads as "no basis" rather than "unknown" because this label sits directly beside a
+ * number: "12 yr · unknown" says the year is unknown, which is the opposite of what the column
+ * means. The provenance is what is unknown, and the roof age is missing entirely.
+ */
 const BASIS_COPY: Record<string, string> = {
-  permit: 'last roofing permit',
+  built_year: 'assessor year built',
+  last_roof_permit: 'last roofing permit',
+  construction_year_proxy: 'county year built',
   synthetic: 'generated',
+  unknown: 'no basis',
 };
 
 /** Roof age is never shown without saying what it is based on. */
@@ -47,11 +57,17 @@ export function RoofAge({ years, basis }: { years: number | null; basis: string 
     return <span className="muted">unknown</span>;
   }
 
+  // Three states, not two. "Not generated" is not the same as "sourced": a basis this build does
+  // not recognise, or one the dataset itself calls unknown, backs no claim at all — and styling it
+  // like a county-sourced figure tells a rep the number came from a record when it did not.
   const generated = basis === 'synthetic';
+  const backed = basis !== null && basis !== 'unknown' && basis in BASIS_COPY && !generated;
   const label = basis === null ? 'unknown basis' : (BASIS_COPY[basis] ?? basis);
 
   return (
-    <span className={generated ? 'value value--generated' : 'value'}>
+    <span
+      className={generated ? 'value value--generated' : backed ? 'value' : 'value value--unbacked'}
+    >
       {years} yr
       <span className="value__basis" title={`Basis: ${label}`}>
         {label}

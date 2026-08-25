@@ -1,9 +1,54 @@
+import { Logger } from '@aws-lambda-powertools/logger';
+import {
+  provenanceTierSchema,
+  roofAgeBasisSchema,
+  roofAgeTier,
+  weakestTier,
+  type ProvenanceTier,
+  type RoofAgeBasis,
+} from '@roofing/schema';
 import { haversineMiles, radiusBoundingBox, scoreLead } from '@roofing/shared';
 import { tool } from 'ai';
 import { z } from 'zod';
 
 import { listLeads, upsertLead, type StoreConfig } from '../leads/store';
 import { getDataset, type PermitRow, type PropertyRow } from './dataset';
+
+const logger = new Logger();
+
+/**
+ * The dataset's roof-age basis, or `'unknown'` when it is a value this build does not recognise.
+ *
+ * `'unknown'` rather than `null`: null means the field was absent, `'unknown'` means the dataset
+ * said there is no basis — and a value we cannot classify is much closer to the second. Logged
+ * because the previous version of this coercion swallowed a whole vocabulary change in silence,
+ * and the first anyone knew of it was reps getting a 400 on the strongest parcels in the county.
+ */
+function basisOf(value: PropertyRow['roof_age_basis']): RoofAgeBasis {
+  const parsed = roofAgeBasisSchema.safeParse(value);
+
+  if (parsed.success) return parsed.data;
+
+  logger.warn('unrecognised roof_age_basis in dataset', { value });
+  return 'unknown';
+}
+
+/**
+ * A permit's provenance tier, or `null` when the dataset does not classify it.
+ *
+ * Same reasoning as `basisOf`: these columns arrive as bare strings from Parquet, so the only
+ * thing standing between a vocabulary change upstream and a wrong trust badge here is a parse.
+ */
+function tierOf(value: string | undefined): ProvenanceTier | null {
+  if (value === undefined) return null;
+
+  const parsed = provenanceTierSchema.safeParse(value);
+
+  if (parsed.success) return parsed.data;
+
+  logger.warn('unrecognised provenance_tier in dataset', { value });
+  return null;
+}
 
 /**
  * What the agent can do.
@@ -185,7 +230,7 @@ export function buildTools(context: ToolContext) {
             assessed_value: property.assessed_value,
             last_sale_date: property.last_sale_date,
             roof_age_years: property.roof_age_years,
-            roof_age_basis: property.roof_age_basis,
+            roof_age_basis: basisOf(property.roof_age_basis),
             distance_miles: property.distance_miles,
             permit_number: permit?.permit_number ?? null,
             permit_status: permit?.improvement_status ?? null,
@@ -194,10 +239,10 @@ export function buildTools(context: ToolContext) {
             contractor: permit?.contractor_name ?? null,
             contractor_bbb_rating: permit?.contractor_bbb_rating ?? null,
             lead_score: scoreOf(property, permit, now),
-            provenance:
-              property.roof_age_basis === 'synthetic' || permit?.provenance_tier === 'synthetic'
-                ? 'synthetic'
-                : 'authoritative',
+            provenance: weakestTier([
+              roofAgeTier(basisOf(property.roof_age_basis)),
+              tierOf(permit?.provenance_tier),
+            ]),
           }))
           .sort((a, b) => b.lead_score - a.lead_score);
 
@@ -299,7 +344,7 @@ export function buildTools(context: ToolContext) {
             address: property.address_street,
             owner: property.owner_name,
             roof_age_years: property.roof_age_years,
-            roof_age_basis: property.roof_age_basis,
+            roof_age_basis: basisOf(property.roof_age_basis),
             assessed_value: property.assessed_value,
             last_sale_date: property.last_sale_date,
           },
@@ -394,6 +439,8 @@ export function buildTools(context: ToolContext) {
 
         const lead = await upsertLead(context.store, {
           parcel_identifier: property.parcel_identifier,
+          // The agent searches at its own fixed threshold, so it scores at the same one.
+          roof_age_threshold: ROOF_AGE_THRESHOLD,
           source_signal:
             agedRoof && permit !== undefined
               ? 'aged_roof_and_permit'
@@ -411,10 +458,7 @@ export function buildTools(context: ToolContext) {
             assessed_value: property.assessed_value,
             last_sale_date: property.last_sale_date,
             roof_age_years: property.roof_age_years,
-            roof_age_basis:
-              property.roof_age_basis === 'synthetic' || property.roof_age_basis === 'permit'
-                ? property.roof_age_basis
-                : null,
+            roof_age_basis: basisOf(property.roof_age_basis),
             permit_number: permit?.permit_number ?? null,
             permit_status: permit?.improvement_status ?? null,
             permit_days_open: permit?.days_open ?? null,

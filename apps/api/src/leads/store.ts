@@ -1,7 +1,9 @@
+import { Logger } from '@aws-lambda-powertools/logger';
 import {
   createLeadInputSchema,
   leadIdForParcel,
   leadSchema,
+  roofAgeTier,
   weakestTier,
   type CreateLeadInput,
   type Lead,
@@ -27,12 +29,11 @@ import {
  * idempotent upsert rather than a create.
  */
 
+const logger = new Logger();
+
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
   marshallOptions: { removeUndefinedValues: true },
 });
-
-/** Roof-age threshold scoring is measured against. Matches the UI's default. */
-const SCORE_THRESHOLD_YEARS = 15;
 
 export interface StoreConfig {
   tableName: string;
@@ -57,7 +58,7 @@ export async function upsertLead(config: StoreConfig, input: CreateLeadInput): P
   // set its own score could promote its leads to the top of everyone's work queue.
   const score = scoreLead({
     roofAgeYears: parsed.snapshot.roof_age_years,
-    roofAgeThreshold: SCORE_THRESHOLD_YEARS,
+    roofAgeThreshold: parsed.roof_age_threshold,
     permitDaysOpen: parsed.snapshot.permit_days_open,
     ownerIsOutOfArea: parsed.snapshot.owner_is_out_of_area,
     lastSaleDate: parsed.snapshot.last_sale_date,
@@ -66,7 +67,7 @@ export async function upsertLead(config: StoreConfig, input: CreateLeadInput): P
   });
 
   const provenance = weakestTier([
-    parsed.snapshot.roof_age_basis === 'synthetic' ? 'synthetic' : 'authoritative',
+    roofAgeTier(parsed.snapshot.roof_age_basis),
     parsed.snapshot.permit_number === null ? 'authoritative' : 'synthetic',
   ]);
 
@@ -219,9 +220,28 @@ export async function listLeads(
           )
         ).Items;
 
-  return (items ?? [])
-    .map((item) => leadSchema.safeParse(item))
-    .filter((parsed) => parsed.success)
-    .map((parsed) => parsed.data)
-    .sort((a, b) => b.score - a.score);
+  // Drop rows this build cannot read, but never silently. A lead written under an older schema
+  // disappearing from a rep's board with no error is a worse failure than the 400 that motivated
+  // this: the 400 is visible, and a board that quietly holds fewer leads than it should is not.
+  // Dropping rather than throwing is deliberate — one unreadable row must not take out the board.
+  const leads: Lead[] = [];
+
+  for (const item of items ?? []) {
+    const parsed = leadSchema.safeParse(item);
+
+    if (parsed.success) {
+      leads.push(parsed.data);
+      continue;
+    }
+
+    logger.warn('dropping unparseable lead', {
+      lead_id: typeof item['lead_id'] === 'string' ? item['lead_id'] : null,
+      issues: parsed.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        code: issue.code,
+      })),
+    });
+  }
+
+  return leads.sort((a, b) => b.score - a.score);
 }

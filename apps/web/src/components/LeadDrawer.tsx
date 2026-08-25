@@ -42,6 +42,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 interface PipelinePanelProps {
   candidate: ScoredCandidate;
+  /** The roof-age threshold the search used, so the stored score matches the displayed one. */
+  roofAgeThreshold: number;
   onLeadChanged: () => void;
 }
 
@@ -53,7 +55,7 @@ interface PipelinePanelProps {
  * guessing from the older one is how a rep ends up converting a property that is already
  * somebody else's active deal.
  */
-function PipelinePanel({ candidate, onLeadChanged }: PipelinePanelProps) {
+function PipelinePanel({ candidate, roofAgeThreshold, onLeadChanged }: PipelinePanelProps) {
   const [revision, setRevision] = useState(0);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -107,7 +109,9 @@ function PipelinePanel({ candidate, onLeadChanged }: PipelinePanelProps) {
                 type="button"
                 className="button"
                 disabled={busy}
-                onClick={() => void run(() => createLead(leadInputFor(candidate, note)))}
+                onClick={() =>
+                  void run(() => createLead(leadInputFor(candidate, roofAgeThreshold, note)))
+                }
               >
                 {busy ? 'Saving…' : 'Convert to lead'}
               </button>
@@ -189,11 +193,18 @@ function PipelinePanel({ candidate, onLeadChanged }: PipelinePanelProps) {
 
 interface LeadDrawerProps {
   candidate: ScoredCandidate;
+  /** The roof-age threshold the search used, so the stored score matches the displayed one. */
+  roofAgeThreshold: number;
   onClose: () => void;
   onLeadChanged: () => void;
 }
 
-export function LeadDrawer({ candidate, onClose, onLeadChanged }: LeadDrawerProps) {
+export function LeadDrawer({
+  candidate,
+  roofAgeThreshold,
+  onClose,
+  onLeadChanged,
+}: LeadDrawerProps) {
   const panel = useRef<HTMLDivElement>(null);
   const permits = useAsync(
     () => getPermitsForParcel(candidate.parcel_identifier),
@@ -218,7 +229,12 @@ export function LeadDrawer({ candidate, onClose, onLeadChanged }: LeadDrawerProp
 
   return (
     <>
-      <div className="drawer__backdrop" onClick={onClose} />
+      {/*
+        Hidden from assistive technology on purpose: this is a pointer affordance, and the drawer
+        is already dismissible with Escape (below). Giving it a role and a key handler would put a
+        second, redundant "close" in the tab order ahead of the drawer's own content.
+      */}
+      <div className="drawer__backdrop" aria-hidden="true" onClick={onClose} />
       <aside
         className="drawer"
         ref={panel}
@@ -339,7 +355,11 @@ export function LeadDrawer({ candidate, onClose, onLeadChanged }: LeadDrawerProp
           </AsyncBoundary>
         </section>
 
-        <PipelinePanel candidate={candidate} onLeadChanged={onLeadChanged} />
+        <PipelinePanel
+          candidate={candidate}
+          roofAgeThreshold={roofAgeThreshold}
+          onLeadChanged={onLeadChanged}
+        />
       </aside>
     </>
   );

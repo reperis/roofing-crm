@@ -41,11 +41,19 @@ jobs:
       - name: Format
         run: pnpm format:check
 
+      - name: Lint
+        run: pnpm lint
+
       - name: Types
         run: pnpm typecheck
 
       - name: Tests
         run: pnpm test
+
+      # Thresholds are set at the suite's measured coverage, so this fails when coverage slips
+      # rather than when it fails to reach a number nobody chose.
+      - name: Coverage
+        run: pnpm test:coverage
 
       - name: Build
         run: pnpm build

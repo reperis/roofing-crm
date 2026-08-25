@@ -7,8 +7,8 @@ platform. That single fact decides the whole design: the parts of this CRM that 
 map pan, radius change and filter — run with no server at all, and only the parts that _write_
 cost anything to operate.
 
-The result is a product whose standing cost is a few cents of S3 storage a month, and which still
-searches 193,229 properties and 73,856 permits in well under a second.
+The result is a product whose standing cost is a fraction of a cent of S3 storage a month, and
+which still searches 193,229 properties and 73,856 permits in well under a second.
 
 ## Two halves
 
@@ -76,13 +76,13 @@ Neither is worth it for a dataset this size.
 
 ## Cost
 
-| Component                             | Cost                                  |
-| ------------------------------------- | ------------------------------------- |
-| S3 storage (~170 MB bundle + dataset) | ~$0.004/mo                            |
-| CloudFront                            | Free tier never expires (1 TB egress) |
-| Lambda                                | Free tier never expires (1M requests) |
-| DynamoDB on-demand                    | Effectively zero at this volume       |
-| Anthropic (Haiku 4.5)                 | ~$0.009 per agent question            |
+| Component                            | Cost                                  |
+| ------------------------------------ | ------------------------------------- |
+| S3 storage (~44 MB bundle + dataset) | ~$0.004/mo                            |
+| CloudFront                           | Free tier never expires (1 TB egress) |
+| Lambda                               | Free tier never expires (1M requests) |
+| DynamoDB on-demand                   | Effectively zero at this volume       |
+| Anthropic (Haiku 4.5)                | ~$0.009 per agent question            |
 
 No VPC, so no NAT Gateway. No database server. No Route53 hosted zone — the default
 `*.cloudfront.net` domain provides HTTPS for free.
@@ -161,6 +161,15 @@ TypeScript everywhere, AWS `us-east-2`, CDK as the only IaC, Vitest, Prettier, `
 typecheck, Powertools Logger on every Lambda, LLM access through the Vercel AI SDK rather than a provider
 SDK.
 
+**tRPC is not used.** `build-frontend-backends` treats it as the contract between a frontend and
+its backend, and this repository has a plain REST handler behind API Gateway instead. The reason is
+narrow: the browser talks to exactly two endpoints — list leads and write a lead — while every
+question that would justify a typed RPC surface is answered by DuckDB **inside the tab**, against
+Parquet, with no server involved at all. Type safety across that boundary comes from the zod
+schemas in `packages/schema`, which both sides import, so the guarantee tRPC provides is present
+without the transport. It is a deviation nonetheless, and it belongs in this list rather than
+being left for a reader to notice.
+
 One trade worth naming plainly: **the leads API is unauthenticated.** `POST` and `PATCH`
 `/api/leads` are reachable by anyone who finds the URL, over a store holding owner names and
 addresses drawn from public county records.
@@ -173,10 +182,12 @@ and provenance on a lead are recomputed server-side rather than accepted from th
 real deployment the first thing to add is an identity on the write routes, and the read path can
 stay open.
 
-One deviation worth naming: **ESLint is not run.** `typescript-eslint` 8.x refuses to load against
-TypeScript 7.0 upstream, so there is no configuration it could run with. Pinning TypeScript back a
-major version to satisfy a linter would be the larger compromise, so the gate is `tsc --noEmit`
-plus Prettier — the same four steps CI runs, and the same four `just check` runs locally.
+One deviation worth naming: **the linter is Biome, not ESLint.** `typescript-eslint` 8.x refuses
+to load against TypeScript 7.0 upstream, so there is no ESLint configuration this toolchain can
+run, and pinning TypeScript back a major version to satisfy a linter would be the larger
+compromise. Biome parses TypeScript itself, independent of the compiler version, so the gate
+exists rather than being an explained absence. Prettier keeps formatting; Biome lints only — see
+`biome.jsonc`, where every disabled rule carries the reason it is disabled.
 
 Two conscious choices worth naming:
 

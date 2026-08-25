@@ -47,6 +47,12 @@ export async function reserveCall(tableName: string, dailyLimit: number): Promis
     }),
   );
 
-  const used = Number(result.Attributes?.['calls'] ?? 0);
+  // An unreadable counter means the increment landed but we cannot prove there was room for it.
+  // Treat that as over the ceiling: the same trade the increment-first ordering above makes, which
+  // is that a slightly conservative limit beats an unbounded bill. Reading it as zero would turn
+  // the one bound on a public endpoint into an open tap at exactly the moment it stopped working.
+  const raw = result.Attributes?.['calls'];
+  const used = typeof raw === 'number' ? raw : dailyLimit + 1;
+
   return { allowed: used <= dailyLimit, used, limit: dailyLimit };
 }

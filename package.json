@@ -11,12 +11,16 @@
     "build": "turbo build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "lint": "biome lint .",
     "dev": "turbo dev",
     "test": "turbo test",
+    "test:coverage": "vitest run --coverage --root .",
     "typecheck": "turbo typecheck"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.10",
     "@types/node": "^26.2.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "jiti": "^2.7.0",
     "prettier": "^3.9.6",

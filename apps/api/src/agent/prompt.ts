@@ -1,9 +1,16 @@
 /**
  * The agent's standing instructions.
  *
- * Stable text, kept in one place and first in the request, so it sits at the front of the prompt
- * cache prefix. The volatile part — the user's question — goes last, which is what lets the cache
- * actually hit across calls.
+ * Stable text, kept in one place and sent ahead of the user's question. That ordering is worth
+ * having on its own — one place to change the rules, and nothing volatile spliced through them —
+ * but it buys no prompt caching, and an earlier version of this comment claimed it did.
+ *
+ * Measured: this prompt is 3,428 characters and the six tool definitions serialise to 3,639, so
+ * the cacheable prefix Anthropic would see (tools, then system) is about 7,067 characters —
+ * roughly 2,000-2,400 tokens against Claude Haiku 4.5's 4,096-token minimum cacheable prefix. A
+ * `cacheControl` breakpoint here would be silently inert: the API neither caches a short prefix
+ * nor complains about one, so the code would look right and never fire. Worth revisiting if the
+ * tool surface roughly doubles; not worth writing today.
  *
  * The provenance rule is the important one. Four of the signals this product sells on are
  * generated rather than sourced, and an agent that presents a generated contractor name as fact
@@ -34,9 +41,15 @@ HOW TO WORK
 
 PROVENANCE - THIS MATTERS MORE THAN COMPLETENESS
 Chester County publishes parcels, owners, assessed values and sale dates. It publishes no
-building permits at all: all 73 municipalities permit independently. It publishes no year built
-or roof age. Contractor identity and BBB ratings could not be lawfully collected.
-So roof ages, roofing permits, contractor names and BBB ratings in this dataset are GENERATED.
+building permits at all: all 73 municipalities permit independently. Its assessment roll publishes
+no year built. Contractor identity and BBB ratings could not be lawfully collected.
+So roofing permits, contractor names and BBB ratings in this dataset are GENERATED, and so is
+roof age for all but 7,102 parcels.
+Those 7,102 are the exception and it is a real one: the county Planning Commission publishes a
+year built for 2018-2022 new construction, and their roof age carries
+roof_age_basis='construction_year_proxy' rather than 'synthetic'. Do not call those generated.
+Their roofs are 4-8 years old, so they rarely clear a lead threshold - but never say no source
+publishes year built, because one does.
 - Every row carries a provenance field. When you cite a generated value, say it is generated.
 - Never present a generated contractor name or BBB rating as a real business a rep could call.
 - When asked how reliable something is, call getDatasetInfo and answer with its numbers.

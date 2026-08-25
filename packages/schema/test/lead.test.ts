@@ -68,6 +68,38 @@ describe('createLeadInputSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('accepts every roof-age basis the dataset publishes', () => {
+    // The regression this exists for: 24,630 parcels — 12.7% of the county — carried a basis the
+    // enum did not list, so converting one returned 400 and the rep saw "Invalid lead" on the
+    // properties with the strongest permit signal in the dataset.
+    for (const basis of [
+      'built_year',
+      'last_roof_permit',
+      'construction_year_proxy',
+      'synthetic',
+      'unknown',
+      null,
+    ]) {
+      const parsed = createLeadInputSchema.safeParse({
+        parcel_identifier: '47-05-0123',
+        source_signal: 'open_permit',
+        snapshot: { ...SNAPSHOT, roof_age_basis: basis },
+      });
+
+      expect(parsed.success, `basis ${String(basis)} must convert`).toBe(true);
+    }
+  });
+
+  it('rejects the roof-age basis this repository invented', () => {
+    const parsed = createLeadInputSchema.safeParse({
+      parcel_identifier: '47-05-0123',
+      source_signal: 'open_permit',
+      snapshot: { ...SNAPSHOT, roof_age_basis: 'permit' },
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
   it('rejects a lead with no parcel to hang off', () => {
     const parsed = createLeadInputSchema.safeParse({
       parcel_identifier: '',

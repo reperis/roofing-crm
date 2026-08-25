@@ -1,0 +1,66 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
+
+  // Biome rather than ESLint, and not as a preference.
+  //
+  // `typescript-eslint` refuses to load against TypeScript 7, so there is no ESLint configuration
+  // this toolchain can run — which is why this repository had no linter at all and said so in its
+  // deviations table. Biome parses TypeScript itself, independent of the compiler version, so the
+  // gate exists rather than being documented as impossible.
+  //
+  // Formatting stays with Prettier, which already owns it and is already enforced in CI. Biome is
+  // the linter only; two tools formatting the same files is how a repository gets a war.
+  "formatter": { "enabled": false },
+
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "error",
+        // console.log in a Lambda is a log line nobody structured; warn and error are deliberate.
+        "noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+        // Every list in this app renders an immutable query result: rows are never reordered,
+        // inserted into, or given per-row state. The hazard this rule guards — React reusing the
+        // wrong element's state when a list shifts — cannot arise, and the alternative is a
+        // fabricated key that lies about identity. Revisit if anything here becomes editable.
+        "noArrayIndexKey": "off",
+      },
+      "correctness": {
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+      },
+      "complexity": {
+        // `tsconfig` sets `noPropertyAccessFromIndexSignature`, which *requires* bracket access
+        // for `process.env` and index signatures. Biome would rewrite exactly those into dot
+        // access and break the build, so the two tools cannot both be right — TypeScript wins.
+        "useLiteralKeys": "off",
+      },
+      "style": {
+        // The codebase already avoids these; the rule is here so it stays that way.
+        "noNonNullAssertion": "error",
+      },
+    },
+  },
+
+  "overrides": [
+    {
+      // Build and staging scripts are command-line tools whose output *is* the interface. A CLI
+      // that cannot print is not a safer CLI.
+      "includes": ["**/scripts/**"],
+      "linter": { "rules": { "suspicious": { "noConsole": "off" } } },
+    },
+  ],
+
+  "files": {
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "!**/node_modules/",
+      "!**/dist/",
+      "!**/cdk.out/",
+      "!**/.turbo/",
+      "!**/public/dataset/",
+    ],
+  },
+}

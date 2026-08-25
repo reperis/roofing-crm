@@ -11,6 +11,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
  */
 
 const send = vi.fn();
+const warn = vi.fn();
+
+// The store logs through Powertools. Stubbed rather than spied on so the assertion does not
+// require the module to export its logger just to be testable.
+vi.mock('@aws-lambda-powertools/logger', () => ({
+  Logger: class {
+    warn = warn;
+    info = vi.fn();
+    error = vi.fn();
+  },
+}));
 
 vi.mock('@aws-sdk/lib-dynamodb', async () => {
   const actual =
@@ -152,6 +163,43 @@ describe('upsertLead', () => {
     expect(Object.values(names)).toContain('status');
   });
 
+  it('keeps a county-sourced roof age authoritative when no permit weakens it', async () => {
+    // `construction_year_proxy` is the county's own year built. It is the strongest roof-age
+    // signal in the dataset, and it must not be filed alongside the generated ones.
+    send.mockResolvedValue({ Attributes: storedLead() });
+
+    await upsertLead(config, {
+      parcel_identifier: '1-9-597',
+      source_signal: 'aged_roof',
+      snapshot: {
+        ...SNAPSHOT,
+        roof_age_basis: 'construction_year_proxy' as const,
+        permit_number: null,
+      },
+    });
+
+    expect((firstInput().ExpressionAttributeValues as Record<string, unknown>)[':tier']).toBe(
+      'authoritative',
+    );
+  });
+
+  it('does not call a lead sourced on the strength of a roof age it does not have', async () => {
+    // 'unknown' means there is no roof age at all — every such parcel has a null one. Treating
+    // that as authoritative used to put a "Sourced" badge on a claim that does not exist. Here
+    // the permit is what qualified the lead, so the permit is what decides its tier.
+    send.mockResolvedValue({ Attributes: storedLead() });
+
+    await upsertLead(config, {
+      parcel_identifier: '1-9-597',
+      source_signal: 'open_permit',
+      snapshot: { ...SNAPSHOT, roof_age_basis: 'unknown' as const, roof_age_years: null },
+    });
+
+    expect((firstInput().ExpressionAttributeValues as Record<string, unknown>)[':tier']).toBe(
+      'synthetic',
+    );
+  });
+
   it('marks a lead synthetic when its permit is generated', async () => {
     send.mockResolvedValue({ Attributes: storedLead() });
 
@@ -232,5 +280,20 @@ describe('listLeads', () => {
 
     const leads = await listLeads(config, null);
     expect(leads).toHaveLength(1);
+  });
+
+  it('says which lead it dropped rather than losing it in silence', async () => {
+    // Dropping is right; dropping quietly is not. A board that holds fewer leads than it should,
+    // with nothing in the logs to say so, is a harder failure to find than the 400 that started
+    // all of this — and this is the exact path a schema change would take a rep's older leads down.
+    warn.mockClear();
+    send.mockResolvedValue({ Items: [storedLead(), { lead_id: 'lead#broken' }] });
+
+    await listLeads(config, null);
+
+    expect(warn).toHaveBeenCalledWith(
+      'dropping unparseable lead',
+      expect.objectContaining({ lead_id: 'lead#broken' }),
+    );
   });
 });

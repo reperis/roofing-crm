@@ -1,4 +1,5 @@
 import {
+  roofAgeTier,
   weakestTier,
   type CreateLeadInput,
   type LeadCandidate,
@@ -126,6 +127,10 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
   const pickRef = useRef(onPick);
   pickRef.current = onPick;
 
+  // Mounts the map exactly once. Every prop it would otherwise depend on is pushed through the
+  // effects below or read from a ref, and re-running this would tear down and rebuild the map on
+  // every render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberately mount-once
   useEffect(() => {
     if (container.current === null || map.current !== null) return;
 
@@ -140,7 +145,16 @@ function MapPanel({ centre, radiusMiles, points, onPick }: MapPanelProps) {
     instance.addControl(new NavigationControl(), 'top-right');
     // Centring on the rep's own position is one of the story's two required ways to start a
     // search; the other is the map click handler below.
-    instance.addControl(new GeolocateControl({ trackUserLocation: false }), 'top-right');
+    //
+    // The control has to be wired, not merely added. On its own it recentres the camera and
+    // nothing else — the pin, the radius ring and every tile are driven by `centre`, so a rep who
+    // pressed it saw the map move and the results stay exactly where they were. Both entry points
+    // now go through the same handler.
+    const geolocate = new GeolocateControl({ trackUserLocation: false });
+    geolocate.on('geolocate', (event) => {
+      pickRef.current({ latitude: event.coords.latitude, longitude: event.coords.longitude });
+    });
+    instance.addControl(geolocate, 'top-right');
 
     instance.on('click', (event: MapMouseEvent) => {
       pickRef.current({ latitude: event.lngLat.lat, longitude: event.lngLat.lng });
@@ -264,10 +278,17 @@ function money(value: number | null): string {
  * The snapshot is the whole point of the lead model: it survives the dataset being republished,
  * so "why did I call this person?" stays answerable weeks later.
  */
-export function leadInputFor(row: ScoredCandidate, note?: string): CreateLeadInput {
+export function leadInputFor(
+  row: ScoredCandidate,
+  roofAgeThreshold: number,
+  note?: string,
+): CreateLeadInput {
   return {
     parcel_identifier: row.parcel_identifier,
     source_signal: signalFor(row),
+    // The server recomputes the score, but against the search the rep actually ran — otherwise
+    // the number stored disagrees with the number they clicked on.
+    roof_age_threshold: roofAgeThreshold,
     latitude: row.latitude,
     longitude: row.longitude,
     snapshot: {
@@ -292,7 +313,15 @@ export function leadInputFor(row: ScoredCandidate, note?: string): CreateLeadInp
 }
 
 /** Convert straight from the results table, without opening the property. */
-function ConvertButton({ row, onConverted }: { row: ScoredCandidate; onConverted: () => void }) {
+function ConvertButton({
+  row,
+  roofAgeThreshold,
+  onConverted,
+}: {
+  row: ScoredCandidate;
+  roofAgeThreshold: number;
+  onConverted: () => void;
+}) {
   const [state, setState] = useState<'idle' | 'saving' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -300,7 +329,7 @@ function ConvertButton({ row, onConverted }: { row: ScoredCandidate; onConverted
     setState('saving');
     setError(null);
     try {
-      await createLead(leadInputFor(row));
+      await createLead(leadInputFor(row, roofAgeThreshold));
       onConverted();
     } catch (cause: unknown) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -402,8 +431,8 @@ export function Prospect() {
         // contractor and BBB rating hanging off it — is the reason anyone would make the call.
         rowTier: weakestTier([
           row.provenance_tier,
-          ...(row.permit_provenance_tier === null ? [] : [row.permit_provenance_tier]),
-          ...(row.roof_age_basis === 'synthetic' ? (['synthetic'] as const) : []),
+          row.permit_provenance_tier,
+          roofAgeTier(row.roof_age_basis),
         ]),
         score: scoreLead({
           roofAgeYears: row.roof_age_years,
@@ -572,10 +601,19 @@ export function Prospect() {
         >
           {() => (
             <>
+              {/*
+                Report what the table actually renders, not what was fetched. The two differ:
+                every candidate is scored and mapped, while the table shows the strongest slice.
+              */}
               <p className="muted">
-                {scored.length.toLocaleString('en-US')} shown
-                {scored.length >= MAP_RESULT_LIMIT ? ` (capped at ${MAP_RESULT_LIMIT})` : ''}, best
-                first.
+                {Math.min(scored.length, TABLE_RESULT_LIMIT).toLocaleString('en-US')} shown, best
+                first
+                {scored.length > TABLE_RESULT_LIMIT
+                  ? ` of ${scored.length.toLocaleString('en-US')} scored`
+                  : ''}
+                . A property qualifies on <strong>either</strong> signal — a roof past your
+                threshold, or a roofing permit open past your stall floor — so the list is the union
+                of both, not only the parcels that have both.
               </p>
               <div className="table-scroll">
                 <table className="table">
@@ -596,6 +634,11 @@ export function Prospect() {
                   </thead>
                   <tbody>
                     {scored.slice(0, TABLE_RESULT_LIMIT).map((row) => (
+                      // A <button> cannot wrap, or be, a table row. The row is the target, so it
+                      // carries the role, a tab stop, an accessible name and the Enter/Space
+                      // handler below — everything a real button would give, on the only element
+                      // that can hold it here.
+                      // biome-ignore lint/a11y/useSemanticElements: a row cannot be a <button>
                       <tr
                         key={row.parcel_identifier}
                         className="row--clickable"
@@ -649,7 +692,11 @@ export function Prospect() {
                               {claimed.get(row.parcel_identifier)}
                             </span>
                           ) : (
-                            <ConvertButton row={row} onConverted={onLeadChanged} />
+                            <ConvertButton
+                              row={row}
+                              roofAgeThreshold={minRoofAge}
+                              onConverted={onLeadChanged}
+                            />
                           )}
                         </td>
                       </tr>
@@ -665,6 +712,7 @@ export function Prospect() {
       {selected !== null && (
         <LeadDrawer
           candidate={selected}
+          roofAgeThreshold={minRoofAge}
           onClose={() => setSelected(null)}
           onLeadChanged={onLeadChanged}
         />

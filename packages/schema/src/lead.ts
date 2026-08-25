@@ -115,13 +115,32 @@ export type Lead = z.infer<typeof leadSchema>;
 export const createLeadInputSchema = z.object({
   parcel_identifier: z.string().min(1),
   source_signal: leadSourceSignalSchema,
+  /**
+   * The roof-age threshold a score was measured against.
+   *
+   * Carried on the request because it is a property of the *search*, not of the parcel: a rep
+   * hunting 30-year roofs and a rep hunting 10-year roofs are asking different questions and get
+   * different scores for the same house. The server previously assumed 15 and recomputed against
+   * it, so the number stored silently disagreed with the number on screen whenever the slider had
+   * moved — and both documents claim those are the same number.
+   *
+   * The *score* stays server-owned; only the question is accepted from the caller.
+   */
+  roof_age_threshold: z.number().int().min(0).max(40).default(15),
   latitude: z.number().nullable().optional(),
   longitude: z.number().nullable().optional(),
   snapshot: leadSnapshotSchema,
   note: z.string().min(1).max(2000).optional(),
 });
 
-export type CreateLeadInput = z.infer<typeof createLeadInputSchema>;
+/**
+ * What a client sends, not what the server ends up with.
+ *
+ * `z.input` rather than `z.infer` deliberately: fields with defaults are optional to a caller and
+ * present after parsing, and conflating the two makes every caller restate a default that exists
+ * precisely so they need not.
+ */
+export type CreateLeadInput = z.input<typeof createLeadInputSchema>;
 
 /** Fields a client is allowed to change afterwards. Score and provenance are server-owned. */
 export const updateLeadInputSchema = z.object({

@@ -41,7 +41,10 @@ export function useAsync<T>(factory: () => Promise<T>, deps: readonly unknown[])
       // slower result can land after a newer one and silently show stale rows.
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `deps` is the caller's array, passed through verbatim. This hook cannot know what its
+    // factory closes over, so the caller owns that decision — the same reason React's own rule
+    // cannot see through it.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: the caller owns this array
   }, deps);
 
   return state;

@@ -17,7 +17,6 @@ import type { Construct } from 'constructs';
 import {
   AGENT_DAILY_CALL_LIMIT,
   ANTHROPIC_KEY_PARAMETER,
-  METRICS_NAMESPACE,
   PROJECT_NAME,
   SERVICE_NAME,
 } from './constants';
@@ -235,7 +234,6 @@ export class RoofingCrmStack extends cdk.Stack {
       environment: {
         LEADS_TABLE_NAME: this.leadsTable.tableName,
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
-        POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
         POWERTOOLS_LOG_LEVEL: 'INFO',
         NODE_OPTIONS: '--enable-source-maps',
       },
@@ -303,7 +301,9 @@ export class RoofingCrmStack extends cdk.Stack {
       // Parsing 193,000 properties and 75,000 permits costs roughly 200 MB, once per container.
       // More memory also buys proportionally more CPU, which is what makes the parse sub-second.
       memorySize: 1536,
-      timeout: cdk.Duration.seconds(60),
+      // Under API Gateway's hard 29 s ceiling, deliberately. A longer function cannot deliver a
+      // response the gateway has already abandoned — it just spends a budget slot on a 504.
+      timeout: cdk.Duration.seconds(25),
       tracing: lambda.Tracing.ACTIVE,
       logRetention: logs.RetentionDays.THREE_MONTHS,
       environment: {
@@ -317,7 +317,6 @@ export class RoofingCrmStack extends cdk.Stack {
         DATASET_BUCKET: datasetBucket.bucketName,
         DATASET_PREFIX: 'dataset',
         POWERTOOLS_SERVICE_NAME: SERVICE_NAME,
-        POWERTOOLS_METRICS_NAMESPACE: METRICS_NAMESPACE,
         POWERTOOLS_LOG_LEVEL: 'INFO',
         NODE_OPTIONS: '--enable-source-maps',
       },

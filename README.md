@@ -109,7 +109,7 @@ Requires Node 24, pnpm 11 and [just](https://github.com/casey/just).
 just setup           # install
 just stage-data      # pull the published dataset from the Oracle runtime
 just dev             # http://localhost:5173
-just test            # 55 tests across 3 packages
+just test            # 62 tests across 4 packages
 just type-check
 ```
 
@@ -128,7 +128,7 @@ just deploy
 
 The read side has **no server**: published Parquet is fetched over HTTP byte ranges and DuckDB
 runs in the salesperson's browser, so panning the map costs nothing. The write side — leads, and
-the agent — is Lambda plus DynamoDB, billed per request. Standing cost is a few cents of S3 a
+the agent — is Lambda plus DynamoDB, billed per request. Standing cost is a fraction of a cent of S3 a
 month.
 
 The agent runs its whole tool loop server-side because it reasons across two stores at once, the

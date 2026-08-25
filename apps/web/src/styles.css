@@ -315,6 +315,12 @@ body {
   color: var(--generated);
 }
 
+/* A roof age whose basis backs nothing. Not the generated colour — that would claim we know how
+   the number was made — and not the plain colour either, which reads as county-sourced. */
+.value--unbacked {
+  color: var(--text-dim);
+}
+
 .value__basis {
   font-size: 0.68rem;
   color: var(--text-dim);

@@ -17,7 +17,16 @@ format:
     pnpm format
 
 # Everything CI checks, in the order CI checks it
-check: format-check type-check test build
+check: format-check lint type-check test coverage build
+
+# Fail if coverage slips below what the suite reaches today
+coverage:
+    pnpm test:coverage
+
+# Lint with Biome. Not ESLint: typescript-eslint refuses to load against TypeScript 7, so there is
+# no ESLint configuration this toolchain can run. See biome.jsonc.
+lint:
+    pnpm lint
 
 # Fail if anything is unformatted, rather than rewriting it
 format-check:
@@ -45,12 +54,20 @@ dev:
 stage-data:
     pnpm --filter @roofing/web run stage
 
+# Fail if the staged dataset publishes a roof-age basis this build does not accept.
+#
+# Not a test, because it cannot be one: `public/dataset/` is gitignored and CI stages no data, so
+# a test reading it would either fail in CI or sit there permanently skipped. This runs where the
+# drift actually enters instead.
+verify-dataset:
+    pnpm --filter @roofing/web run verify-dataset
+
 # Chained here rather than in the shell: `&&` is a parser error in Windows PowerShell 5.1. Run
 # this whenever the Oracle pipeline republishes, or this site and the Oracle site will quietly
 # disagree about the same county.
 #
-# Re-pull the published Oracle dataset and ship it
-refresh: stage-data deploy
+# Re-pull the published Oracle dataset, check its vocabulary, and ship it
+refresh: stage-data verify-dataset deploy
 
 # Deploy the CDK stack to AWS (us-east-2)
 deploy: build

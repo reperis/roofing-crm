@@ -15,9 +15,6 @@ export const STACK_NAME = 'RoofingCrm-Arturas';
 /** Powertools service name, shared by every Lambda in this project. */
 export const SERVICE_NAME = 'roofing-crm';
 
-/** CloudWatch namespace for all custom metrics emitted by this project. */
-export const METRICS_NAMESPACE = 'RoofingCrm';
-
 /**
  * SSM SecureString holding the Anthropic API key.
  *

@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build && tsx scripts/compress-wasm.ts",
     "stage": "tsx scripts/stage-data.ts",
+    "verify-dataset": "tsx scripts/verify-dataset.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests"

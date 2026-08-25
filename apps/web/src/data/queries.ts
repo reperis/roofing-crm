@@ -101,24 +101,59 @@ export function buildLeadCandidateSql(
   const qualifies = filters.requireOpenPermit ? permitSignal : `(${roofSignal} OR ${permitSignal})`;
   const permitJoin = filters.requireOpenPermit ? 'JOIN' : 'LEFT JOIN';
 
+  const half = Math.max(1, Math.floor(filters.limit / 2));
+
+  // The cap has to spend itself on every signal in play.
+  //
+  // It used to order by permit stall and then cut, which meant every returned row carried a
+  // permit and not one aged-roof lead could reach the screen — 500 of 500, beneath a tile saying
+  // 15,652 aged roofs existed. The client then sorted that biased sample by score and called it
+  // "best first".
+  //
+  // Ranking cannot move into SQL: `scoreLead` is the business policy, and it is shared with the
+  // leads API so a converted lead stores the number the rep saw. Duplicating it as a CASE
+  // expression is the drift that shared function exists to prevent. So the query stops deciding
+  // *who wins* and decides only *who is considered*.
+  const strongest = (where: string, orderBy: string, take: number): string => `
+    (SELECT * FROM considered
+      ${where}
+      ORDER BY ${orderBy} DESC NULLS LAST, parcel_identifier
+      LIMIT ${take})`;
+
+  // Requiring a permit leaves one signal, and one signal has nothing to share the budget with —
+  // the split exists to stop two signals crowding each other out, not as a ritual.
+  const selection = filters.requireOpenPermit
+    ? strongest('', 'permit_days_open', filters.limit)
+    : [
+        strongest('WHERE permit_number IS NOT NULL', 'permit_days_open', half),
+        strongest('', 'roof_age_years', half),
+      ].join('\n    UNION');
+
   return `
-    WITH open_roofing AS (${LONGEST_OPEN_ROOFING_PERMIT})
-    SELECT p.parcel_identifier, p.address_street, p.address_city, p.address_zip,
-           p.latitude, p.longitude, p.owner_name, p.owner_is_out_of_area,
-           p.assessed_value, p.market_value, p.last_sale_date, p.property_type,
-           p.roof_age_years, p.roof_age_basis, p.provenance_tier,
-           round(${distanceExpression(centre, 'p')}, 2) AS distance_miles,
-           m.permit_number, m.improvement_status,
-           m.days_open AS permit_days_open,
-           m.contractor_name, m.contractor_bbb_rating, m.contractor_bbb_score,
-           m.permit_provenance_tier,
-           NULL AS existing_lead_status
-    FROM properties AS p
-    ${permitJoin} open_roofing AS m USING (parcel_identifier)
-    WHERE ${radiusPredicate(centre, radiusMiles, 'p')}
-      AND ${qualifies}
-    ORDER BY m.days_open DESC NULLS LAST, p.roof_age_years DESC NULLS LAST
-    LIMIT ${filters.limit};
+    WITH open_roofing AS (${LONGEST_OPEN_ROOFING_PERMIT}),
+    considered AS (
+      SELECT p.parcel_identifier, p.address_street, p.address_city, p.address_zip,
+             p.latitude, p.longitude, p.owner_name, p.owner_is_out_of_area,
+             p.assessed_value, p.market_value, p.last_sale_date, p.property_type,
+             p.roof_age_years, p.roof_age_basis, p.provenance_tier,
+             round(${distanceExpression(centre, 'p')}, 2) AS distance_miles,
+             m.permit_number, m.improvement_status,
+             m.days_open AS permit_days_open,
+             m.contractor_name, m.contractor_bbb_rating, m.contractor_bbb_score,
+             m.permit_provenance_tier,
+             NULL AS existing_lead_status
+      FROM properties AS p
+      ${permitJoin} open_roofing AS m USING (parcel_identifier)
+      WHERE ${radiusPredicate(centre, radiusMiles, 'p')}
+        AND ${qualifies}
+    )
+    -- No outer LIMIT: each branch is already capped, so their union cannot exceed the budget,
+    -- and re-sorting before a final cut is exactly how the bias got in. The order below is for
+    -- determinism only; the client ranks by score.
+    SELECT * FROM (
+      ${selection}
+    )
+    ORDER BY permit_days_open DESC NULLS LAST, roof_age_years DESC NULLS LAST;
   `;
 }
 
@@ -128,6 +163,13 @@ export async function findLeadCandidates(
   filters: LeadCandidateFilters,
 ): Promise<LeadCandidate[]> {
   const db = await getDb();
+
+  // Asserted, not parsed, and deliberately so. Validating every row would run a Zod schema over
+  // ~25 fields × up to 500 rows on the query path this app sells as taking tens of milliseconds,
+  // to guard a display surface where the honest failure is showing the value as it arrived. The
+  // boundary that matters is the write: `createLeadInputSchema` parses on the way into the store,
+  // and `just verify-dataset` checks the published vocabulary against the schema after every
+  // refresh. Both are free; this would not be.
   return db.query<LeadCandidate>(buildLeadCandidateSql(centre, radiusMiles, filters));
 }
 
