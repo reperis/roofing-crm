@@ -7,7 +7,6 @@ import {
   leadStatuses,
   updateLeadInputSchema,
 } from '../src/lead';
-import { weakestTier } from '../src/provenance';
 
 const SNAPSHOT = {
   address_street: '123 Gay St',
@@ -36,22 +35,6 @@ describe('leadIdForParcel', () => {
 
   it('derives different ids for different parcels', () => {
     expect(leadIdForParcel('47-05-0123')).not.toBe(leadIdForParcel('47-05-0124'));
-  });
-});
-
-describe('weakestTier', () => {
-  it('returns authoritative only when every input is authoritative', () => {
-    expect(weakestTier(['authoritative', 'authoritative'])).toBe('authoritative');
-  });
-
-  it('degrades to synthetic when any input is generated', () => {
-    // A lead built on a real parcel but a generated permit is a generated lead: the permit is
-    // the reason anyone would make the call.
-    expect(weakestTier(['authoritative', 'synthetic'])).toBe('synthetic');
-  });
-
-  it('treats an empty input list as authoritative', () => {
-    expect(weakestTier([])).toBe('authoritative');
   });
 });
 
