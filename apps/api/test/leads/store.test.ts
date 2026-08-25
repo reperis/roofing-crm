@@ -252,6 +252,28 @@ describe('updateLead', () => {
   });
 });
 
+describe('listLeads ranking', () => {
+  it('ranks the whole board, not the page DynamoDB happened to return', async () => {
+    // `Limit` used to be pushed down and the sort applied to whatever came back, so past the
+    // limit a rep's board was "N leads in scan order, sorted" — indistinguishable from the real
+    // thing on screen, and not it. The strongest lead here is deliberately on the second page.
+    const page = (score: number, id: string) => storedLead({ lead_id: id, score });
+
+    send.mockReset();
+    send
+      .mockResolvedValueOnce({
+        Items: [page(10, 'lead#a'), page(20, 'lead#b')],
+        LastEvaluatedKey: { lead_id: 'lead#b' },
+      })
+      .mockResolvedValueOnce({ Items: [page(99, 'lead#c')] });
+
+    const leads = await listLeads(config, null, 2);
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(leads.map((lead) => lead.score)).toEqual([99, 20]);
+  });
+});
+
 describe('listLeads', () => {
   it('queries the by-status index rather than filtering a scan', async () => {
     send.mockResolvedValue({ Items: [storedLead({ status: 'contacted' })] });

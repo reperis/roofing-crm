@@ -435,7 +435,10 @@ export function buildTools(context: ToolContext) {
         }
 
         const permit = longestOpenRoofingPermits(permits).get(property.parcel_identifier);
-        const agedRoof = property.roof_age_years !== null && property.roof_age_years > 0;
+        // Against the threshold the agent searched at, not zero — otherwise a new roof beside a
+        // stalled permit is labelled an aged-roof lead and the rep opens on the wrong thing.
+        const agedRoof =
+          property.roof_age_years !== null && property.roof_age_years > ROOF_AGE_THRESHOLD;
 
         const lead = await upsertLead(context.store, {
           parcel_identifier: property.parcel_identifier,

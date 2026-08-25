@@ -285,7 +285,7 @@ export function leadInputFor(
 ): CreateLeadInput {
   return {
     parcel_identifier: row.parcel_identifier,
-    source_signal: signalFor(row),
+    source_signal: signalFor(row, roofAgeThreshold),
     // The server recomputes the score, but against the search the rep actually ran — otherwise
     // the number stored disagrees with the number they clicked on.
     roof_age_threshold: roofAgeThreshold,
@@ -356,9 +356,15 @@ function ConvertButton({
   );
 }
 
-/** Which signal put this property on the list — drives the default outreach script. */
-export function signalFor(row: ScoredCandidate): LeadSourceSignal {
-  const agedRoof = row.roof_age_years !== null && row.roof_age_years > 0;
+/**
+ * Which signal put this property on the list — drives the default outreach script.
+ *
+ * Measured against the threshold the search used, not against zero. A three-year-old roof beside
+ * a stalled permit was being labelled `aged_roof_and_permit`, so a rep opened with the roof on a
+ * house whose roof is fine. It qualified through the permit; the script should say so.
+ */
+export function signalFor(row: ScoredCandidate, roofAgeThreshold: number): LeadSourceSignal {
+  const agedRoof = row.roof_age_years !== null && row.roof_age_years > roofAgeThreshold;
   const permit = row.permit_number !== null;
 
   if (agedRoof && permit) return 'aged_roof_and_permit';

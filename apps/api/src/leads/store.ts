@@ -197,28 +197,59 @@ export async function getLead(config: StoreConfig, leadId: string): Promise<Lead
  * lead table is small, and a scan of a small table is cheaper than maintaining an index whose
  * only purpose is to enumerate everything.
  */
+/**
+ * How much of the lead table one board read will pull before it gives up and says so.
+ *
+ * Far above any real roofing company's pipeline, and far below anything that would strain a
+ * Lambda — it exists so that an unbounded table degrades loudly instead of quietly.
+ */
+const MAX_SCANNED = 5_000;
+
 export async function listLeads(
   config: StoreConfig,
   status: LeadStatus | null,
   limit = 200,
 ): Promise<Lead[]> {
-  const items =
-    status === null
-      ? (await client.send(new ScanCommand({ TableName: config.tableName, Limit: limit }))).Items
-      : (
-          await client.send(
-            new QueryCommand({
-              TableName: config.tableName,
-              IndexName: 'by-status',
-              KeyConditionExpression: '#status = :status',
-              ExpressionAttributeNames: { '#status': 'status' },
-              ExpressionAttributeValues: { ':status': status },
-              // Oldest first: the lead that has sat longest in a stage is the one going stale.
-              ScanIndexForward: true,
-              Limit: limit,
-            }),
-          )
-        ).Items;
+  // Read the whole board before ranking it.
+  //
+  // `Limit` used to be pushed down to DynamoDB and the sort applied afterwards, which ranks
+  // whatever arbitrary page came back rather than the leads themselves — past `limit` records a
+  // rep's board silently became "200 leads in scan order, sorted", which looks identical to the
+  // real thing and is not it. `limit` is applied after the sort now, so it caps the answer rather
+  // than deciding it.
+  //
+  // Paging the whole table is affordable for exactly the reason the comment above gives: one
+  // roofing company's lead table is small. `MAX_SCANNED` is the backstop for the day that stops
+  // being true, and it says so out loud rather than truncating in silence.
+  const items: Record<string, unknown>[] = [];
+  let cursor: Record<string, unknown> | undefined;
+
+  do {
+    const page = await client.send(
+      status === null
+        ? new ScanCommand({ TableName: config.tableName, ExclusiveStartKey: cursor })
+        : new QueryCommand({
+            TableName: config.tableName,
+            IndexName: 'by-status',
+            KeyConditionExpression: '#status = :status',
+            ExpressionAttributeNames: { '#status': 'status' },
+            ExpressionAttributeValues: { ':status': status },
+            // Oldest first: the lead that has sat longest in a stage is the one going stale.
+            ScanIndexForward: true,
+            ExclusiveStartKey: cursor,
+          }),
+    );
+
+    items.push(...(page.Items ?? []));
+    cursor = page.LastEvaluatedKey;
+  } while (cursor !== undefined && items.length < MAX_SCANNED);
+
+  if (cursor !== undefined) {
+    logger.warn('lead table exceeded the single-read ceiling; the board is ranking a subset', {
+      scanned: items.length,
+      ceiling: MAX_SCANNED,
+    });
+  }
 
   // Drop rows this build cannot read, but never silently. A lead written under an older schema
   // disappearing from a rep's board with no error is a worse failure than the 400 that motivated
@@ -243,5 +274,5 @@ export async function listLeads(
     });
   }
 
-  return leads.sort((a, b) => b.score - a.score);
+  return leads.sort((a, b) => b.score - a.score).slice(0, limit);
 }
