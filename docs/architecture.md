@@ -193,6 +193,13 @@ Two conscious choices worth naming:
 
 - **Anthropic directly, not Bedrock.** `stack-ai-sdk-for-llm` mandates the Vercel AI SDK, which
   this uses; Bedrock would add partner pricing and setup for no benefit here.
-- **No PagerDuty or DLQ alarms.** The observability rules assume a service with an on-call
-  rotation. This is a demonstration runtime with no on-call; structured logging and X-Ray tracing
-  are wired, and paging a rotation that does not exist would be theatre.
+- **No PagerDuty, DLQ alarms or custom metrics.** The observability rules assume a service with
+  an on-call rotation. This is a demonstration runtime with no on-call; structured logging
+  (Powertools Logger on both Lambdas) and X-Ray tracing (`Tracing.ACTIVE`) are wired, because both
+  are useful to whoever is actually debugging this. Paging a rotation that does not exist would be
+  theatre — and so, by the same argument, is publishing business metrics to a dashboard nobody
+  watches. The stack previously injected `POWERTOOLS_METRICS_NAMESPACE` and named a
+  `METRICS_NAMESPACE` constant "for all custom metrics emitted by this project"; no metric was ever
+  emitted, so the configuration was removed rather than given something to do. Note that X-Ray here
+  is the Lambda service segment only: without the Powertools Tracer instrumenting the AWS SDK
+  clients, a trace is one span per invocation, not a breakdown.

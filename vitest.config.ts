@@ -24,13 +24,13 @@ export default defineConfig({
         'apps/api/src/leads/store.ts',
         'apps/web/src/data/queries.ts',
       ],
-      // Measured, not aspirational: 84.87 / 79.1 / 76 / 84.48 today. Set just beneath so the
+      // Measured, not aspirational: 86.36 / 83.11 / 76 / 85.82 today. Set just beneath so the
       // gate is a ratchet rather than a wish — it cannot slip without someone being told.
       thresholds: {
-        statements: 82,
-        branches: 77,
+        statements: 84,
+        branches: 81,
         functions: 74,
-        lines: 82,
+        lines: 84,
       },
     },
   },

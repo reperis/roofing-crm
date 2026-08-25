@@ -101,6 +101,28 @@ stays marked for life.
 
 Full detail, including why each source is unavailable: [docs/provenance.md](docs/provenance.md).
 
+## Why the API is unauthenticated
+
+The lead API takes no credentials, and that is a consequence of the zero-credential demo runtime
+rather than a missing check. It is also structural: the CloudFront origin request policy in front
+of `/api` allow-lists exactly one header, `content-type`
+([`roofing-crm-stack.ts`](../apps/api/cdk/lib/roofing-crm-stack.ts)). An `Authorization` header
+would be stripped at the edge before the origin ever saw it, so adding auth means changing the
+distribution and introducing an identity provider — not adding an `if` to the handler.
+
+What bounds it today: API Gateway throttling at 20 requests per second with a burst of 40; a daily
+ceiling on model calls, which is the only thing between an anonymous visitor and the account
+balance, and which fails closed if its counter cannot be read; upserts keyed by parcel, so a repeat
+write updates one record instead of creating duplicates; and no data beyond what Chester County
+already publishes — owner names and assessed values are public record.
+
+What it costs, plainly: anyone with the URL can create and modify leads, and the agent's
+`createLead` tool reaches that same surface with no human review gate, so a well-phrased question
+can put a property on the team's board. For production the first three changes would be a signed
+session cookie checked at the edge — cookie forwarding is configured separately from headers, so
+it survives the allow-list that a bearer token does not — per-user attribution on every lead, and a
+confirmation step before the agent writes anything.
+
 ## Running it
 
 Requires Node 24, pnpm 11 and [just](https://github.com/casey/just).
@@ -109,8 +131,9 @@ Requires Node 24, pnpm 11 and [just](https://github.com/casey/just).
 just setup           # install
 just stage-data      # pull the published dataset from the Oracle runtime
 just dev             # http://localhost:5173
-just test            # 62 tests across 4 packages
+just test            # the full Vitest suite, all four workspaces
 just type-check
+just verify-dataset  # check the staged dataset against the schema's vocabulary
 ```
 
 Deploying needs AWS credentials for `us-east-2` and one out-of-band secret — CloudFormation cannot

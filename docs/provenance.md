@@ -12,7 +12,9 @@ disclaimer, it is the difference between a usable product and a liability.
 ## Tiers
 
 Two values, reproduced unchanged from the upstream dataset rather than redefined here — otherwise
-the two systems could drift into disagreeing about what "sourced" means.
+the two systems could drift into disagreeing about what "sourced" means. The same applies to
+`roof_age_basis`, which has its own five-value vocabulary; see below for what happened the one
+time this repository decided it knew better.
 
 | Tier            | Meaning                                                             |
 | --------------- | ------------------------------------------------------------------- |
@@ -88,9 +90,52 @@ Applied upstream, and relied on here:
   without impersonating any specific business.
 - **`built_year` is never populated.** Writing a generated value into a column consumers read as
   assessor-sourced is indistinguishable from fabrication. Only `roof_age_years` is generated, and
-  always with `roof_age_basis = 'synthetic'`.
+  a generated one always carries `roof_age_basis = 'synthetic'`.
 - **Deterministic.** Values are seeded from the parcel's own identifier, so the same property
   yields the same roof age on every run, on any machine.
 
+## The roof-age basis vocabulary
+
+`roof_age_basis` says how a roof age was arrived at, and it is the upstream column's vocabulary
+reproduced verbatim — five values, not the two this repository once assumed:
+
+| Basis                     | Rows in the county | Meaning                                               |
+| ------------------------- | -----------------: | ----------------------------------------------------- |
+| `synthetic`               |            168,599 | Generated, seeded from the parcel identifier.         |
+| `unknown`                 |             17,528 | No roof age at all — the column is null on every one. |
+| `construction_year_proxy` |              7,102 | Derived from the county's published year built.       |
+| `last_roof_permit`        |                  0 | Derived from a permit recording a re-roof.            |
+| `built_year`              |                  0 | Read from an assessor year built.                     |
+
+The last two are published by the pipeline but do not occur in the current extract. They are
+accepted anyway, because the contract is the pipeline's vocabulary and not the sample it happens
+to have produced today.
+
+This drifted once and it was expensive. The enum here listed a `permit` basis the pipeline never
+emits, and omitted `construction_year_proxy` and `unknown` — so lead conversion returned a 400 for
+all 24,630 parcels carrying one of them, 12.7% of the county.
+
+Worth being exact about who could hit it, because the two paths differ:
+
+- **From the map.** Only `construction_year_proxy`, and only with the roof-age threshold set below
+  those parcels' 4–8 years — 877 of them inside the default five-mile radius at a threshold of 0.
+  `unknown` parcels never reach the candidate list at all: their roof age is null, and every one of
+  the 5,177 open roofing permits attaches to a `synthetic` parcel, so neither signal qualifies them.
+- **From the agent, or any direct call.** `createLead` takes a parcel identifier, so all 24,630 are
+  reachable there — and that path failed harder, throwing inside the store rather than returning a
+  400, which surfaces as a 500.
+
+The type system hid all of it: the browser asserts DuckDB rows rather than parsing them, so the
+value travelled from Parquet to the API before anything objected.
+
+`just verify-dataset` now checks the published values against `roofAgeBasisSchema` and is chained
+into `just refresh`. It is a recipe rather than a test because `apps/web/public/dataset/` is
+gitignored and CI stages no data — a test reading the real extract would fail in CI or sit there
+permanently skipped. **Re-staging the dataset without running it is how this drifts again.**
+
 A strictly-sourced view of the data is therefore always available:
-`WHERE roof_age_basis <> 'synthetic' AND provenance_tier = 'authoritative'`.
+`WHERE roof_age_basis IN ('built_year', 'last_roof_permit', 'construction_year_proxy')
+AND provenance_tier = 'authoritative'`.
+
+Note that this is narrower than the older `roof_age_basis <> 'synthetic'`, which also admitted
+`unknown` — a row that asserts nothing rather than one that asserts something sourced.

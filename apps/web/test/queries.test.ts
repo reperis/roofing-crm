@@ -29,10 +29,12 @@ const YEAR = 365;
  * `1-AGED-YOUNGPERMIT` is one regression: an aged roof whose permit is younger than any stall
  * floor a user might set. It qualifies through its roof and must survive regardless.
  *
- * `5-PROXY-STALLED` and `6-UNKNOWN-STALLED` are the other. They carry the two roof-age bases the
- * schema used to omit — 24,630 real parcels between them — and both reach the candidate list on
- * the permit signal alone, exactly as they do in the county. A fixture that only ever said
- * 'synthetic' is why the mismatch reached production.
+ * `5-PROXY-STALLED` and `6-UNKNOWN-STALLED` carry the two roof-age bases the schema used to omit,
+ * 24,630 real parcels between them. The fixture deliberately gives both an open permit so they
+ * reach the candidate list here — in the county only `construction_year_proxy` does, and only
+ * below a roof-age threshold of about eight — because the point being pinned is that no basis
+ * value causes the query and the write boundary to disagree, whichever way a row arrives. A
+ * fixture that only ever said 'synthetic' is why the mismatch reached production.
  */
 const FIXTURE = `
   CREATE TABLE properties AS SELECT * FROM (VALUES

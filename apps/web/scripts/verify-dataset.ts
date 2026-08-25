@@ -33,7 +33,10 @@ const published = reader.getRowObjects().map((row) => (row['basis'] ?? null) as 
 const unknown = published.filter((basis) => !roofAgeBasisSchema.safeParse(basis).success);
 
 console.log(
-  `Published roof_age_basis values: ${published.map((b) => b ?? 'NULL').sort().join(', ')}`,
+  `Published roof_age_basis values: ${published
+    .map((b) => b ?? 'NULL')
+    .sort()
+    .join(', ')}`,
 );
 
 if (unknown.length > 0) {

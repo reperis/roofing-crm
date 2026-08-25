@@ -25,13 +25,16 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      # Majors kept current deliberately: v4 of these targets Node 20, which GitHub has
+      # deprecated and now force-runs on Node 24. Pinning to a runtime the platform is retiring
+      # is a build that breaks on someone else's schedule.
+      - uses: actions/checkout@v5
 
       # No version pinned here: the action reads `packageManager` from package.json, so the lockfile
       # and CI can never disagree about which pnpm produced it.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24 # matches `engines.node`
           cache: pnpm

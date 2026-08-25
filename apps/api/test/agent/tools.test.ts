@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
  * The fixture carries the roof-age bases the county actually emits, because the defect these
  * tests exist for was a vocabulary mismatch that no hand-written `'synthetic'` fixture could have
  * caught: 24,630 parcels — 12.7% of the county — carried a basis the schema did not list, and
- * converting one returned 400.
+ * converting one failed. This tool is the widest way in, because it converts by parcel identifier
+ * rather than from a filtered candidate list.
  */
 
 const upsertLead = vi.fn();
@@ -105,8 +106,9 @@ describe('createLead', () => {
   });
 
   it('converts a parcel that has no roof age at all', async () => {
-    // 17,528 parcels report `unknown` with a null roof age. They reach the candidate list on the
-    // permit signal alone, so a rep can see them — and, before this, could not save them.
+    // 17,528 parcels report `unknown` with a null roof age. They never surface on the map — no
+    // roof-age signal and no open roofing permit — but this tool takes a parcel identifier, so the
+    // agent can be asked for one by address. Before this, that path threw inside the store.
     const t = tools([property({ roof_age_basis: 'unknown', roof_age_years: null })], [permit()]);
 
     await run(t.createLead, { parcelIdentifier: '52-4-27' });
